@@ -4,7 +4,6 @@ A lightweight, sqlite-backed persistent queue implementation in Go.
 
 [![Go](https://github.com/mattdeak/godq/actions/workflows/go.yml/badge.svg)](https://github.com/mattdeak/godq/actions/workflows/go.yml)
 [![GoDoc](https://godoc.org/github.com/mattdeak/godq?status.svg)](https://godoc.org/github.com/mattdeak/godq)
-[![codecov](https://codecov.io/gh/mattdeak/godq/branch/main/graph/badge.svg)](https://codecov.io/gh/mattdeak/godq)
 
 godq is a lightweight, persistent queue implementation in Go, using SQLite as the underlying storage mechanism. It provides various queue types to suit different use cases, including simple queues, acknowledged queues, and unique item queues.
 
