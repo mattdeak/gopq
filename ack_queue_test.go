@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	queue "github.com/mattdeak/gopq"
+	"github.com/mattdeak/gopq"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -14,7 +14,7 @@ func TestNewAckQueue(t *testing.T) {
 	tempFile := tempFilePath(t)
 	defer os.Remove(tempFile)
 
-	q, err := queue.NewAckQueue(tempFile, queue.AckOpts{AckTimeout: time.Second})
+	q, err := gopq.NewAckQueue(tempFile, gopq.AckOpts{AckTimeout: time.Second})
 	if err != nil {
 		t.Fatalf("NewAckQueue() error = %v", err)
 	}
@@ -181,11 +181,11 @@ func TestAckQueue_Len(t *testing.T) {
 	}
 }
 
-func setupTestAckQueue(t *testing.T) *queue.AckQueue {
+func setupTestAckQueue(t *testing.T) *gopq.AckQueue {
 	tempFile := tempFilePath(t)
 	t.Cleanup(func() { os.Remove(tempFile) })
 
-	q, err := queue.NewAckQueue(tempFile, queue.AckOpts{AckTimeout: time.Hour * 999})
+	q, err := gopq.NewAckQueue(tempFile, gopq.AckOpts{AckTimeout: time.Hour * 999})
 	if err != nil {
 		t.Fatalf("Failed to create test queue: %v", err)
 	}
