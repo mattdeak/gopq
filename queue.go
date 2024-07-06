@@ -14,10 +14,10 @@ const (
 )
 
 
-// DQueue represents a durable queue interface.
+// Queue represents a durable queue interface.
 // It provides methods for enqueueing and dequeueing items,
 // with both blocking and non-blocking operations.
-type DQueue interface {
+type Queue interface {
     // Enqueue adds an item to the queue.
     // It returns an error if the operation fails.
     Enqueue(item []byte) error
@@ -50,7 +50,7 @@ type DQueue interface {
 // AckableQueue extends the DQueue interface with acknowledgement capabilities.
 // It allows for explicit acknowledgement or negative acknowledgement of processed items.
 type AckableQueue interface {
-    DQueue
+    Queue
 
     // Ack acknowledges that an item has been successfully processed.
     // It takes the ID of the message to acknowledge.
