@@ -9,12 +9,13 @@ import (
 	"github.com/mattdeak/godq/internal"
 )
 
-
+// AckQueue is a queue that provides the ability to acknowledge messages.
 type AckQueue struct {
 	baseQueue
 	ackTimeout time.Duration
 }
 
+// NewAckQueue creates a new ack queue.
 func NewAckQueue(filePath string, opts AckOpts) (*AckQueue, error) {
 	db, err := internal.InitializeDB(filePath)
 	if err != nil {
@@ -51,6 +52,7 @@ func setupAckQueue(db *sql.DB, name string, pollInterval time.Duration, opts Ack
     }, nil
 }
 
+// Enqueue adds an item to the queue.
 func (pq *AckQueue) Enqueue(item []byte) error {
     _, err := pq.db.Exec(fmt.Sprintf(`
         INSERT INTO %s (item) VALUES (?)
@@ -109,6 +111,7 @@ func (pq *AckQueue) TryDequeueCtx(ctx context.Context) (Msg, error) {
 	}, nil
 }
 
+// Ack marks an item as processed.
 func (pq *AckQueue) Ack(id int64) error {
 	res, err := pq.db.Exec(fmt.Sprintf(`
 		UPDATE %s 
@@ -156,6 +159,7 @@ func (pq *AckQueue) Nack(id int64) error {
 	return nil
 }
 
+// Len returns the number of items in the queue.
 func (pq *AckQueue) Len() (int, error) {
     row := pq.db.QueryRow(fmt.Sprintf(`
         SELECT COUNT(*) FROM %s WHERE processed_at IS NULL AND (ack_deadline < CURRENT_TIMESTAMP OR ack_deadline IS NULL)

@@ -9,11 +9,13 @@ import (
 	"github.com/mattdeak/godq/internal"
 )
 
+// UniqueAckQueue is a acknowledgeable queue that ensures that each item is only processed once.
 type UniqueAckQueue struct {
 	baseQueue
 	ackTimeout time.Duration
 }
 
+// NewUniqueAckQueue creates a new unique ack queue.
 func NewUniqueAckQueue(filePath string, opts AckOpts) (*UniqueAckQueue, error) {
 	db, err := internal.InitializeDB(filePath)
 	if err != nil {
@@ -51,6 +53,7 @@ func setupUniqueAckQueue(db *sql.DB, name string, pollInterval time.Duration, op
 	}, nil
 }
 
+// Enqueue adds an item to the queue.
 func (uaq *UniqueAckQueue) Enqueue(item []byte) error {
 	_, err := uaq.db.Exec(fmt.Sprintf(`
 		INSERT INTO %s (item) VALUES (?)
@@ -64,18 +67,26 @@ func (uaq *UniqueAckQueue) Enqueue(item []byte) error {
 	return nil
 }
 
+// Dequeue blocks until an item is available. Uses background context.
 func (uaq *UniqueAckQueue) Dequeue() (Msg, error) {
 	return uaq.DequeueCtx(context.Background())
 }
 
+// DequeueCtx attempts to dequeue an item without blocking using a context.
+// If no item is available, it returns an empty Msg and an error.
 func (uaq *UniqueAckQueue) DequeueCtx(ctx context.Context) (Msg, error) {
 	return dequeueBlocking(ctx, uaq, uaq.pollInterval, uaq.notifyChan)
 }
 
+
+// TryDequeue attempts to dequeue an item without blocking.
+// If no item is available, it returns an empty Msg and an error.
 func (uaq *UniqueAckQueue) TryDequeue() (Msg, error) {
 	return uaq.TryDequeueCtx(context.Background())
 }
 
+// TryDequeueCtx attempts to dequeue an item without blocking using a context.
+// If no item is available, it returns an empty Msg and an error.
 func (uaq *UniqueAckQueue) TryDequeueCtx(ctx context.Context) (Msg, error) {
 	row := uaq.db.QueryRowContext(ctx, fmt.Sprintf(`
 		WITH oldest AS (
@@ -102,6 +113,7 @@ func (uaq *UniqueAckQueue) TryDequeueCtx(ctx context.Context) (Msg, error) {
 	}, nil
 }
 
+// Ack marks an item as processed and removes it from the queue.
 func (uaq *UniqueAckQueue) Ack(id int64) error {
 	res, err := uaq.db.Exec(fmt.Sprintf(`
 		DELETE FROM %s 
@@ -124,6 +136,7 @@ func (uaq *UniqueAckQueue) Ack(id int64) error {
 	return nil
 }
 
+// Nack marks an item as not processed and removes it from the queue.
 func (uaq *UniqueAckQueue) Nack(id int64) error {
 	res, err := uaq.db.Exec(fmt.Sprintf(`
 		UPDATE %s SET ack_deadline = NULL WHERE id = ?
@@ -145,6 +158,7 @@ func (uaq *UniqueAckQueue) Nack(id int64) error {
 	return nil
 }
 
+// Len returns the number of items in the queue.
 func (uaq *UniqueAckQueue) Len() (int, error) {
 	row := uaq.db.QueryRow(fmt.Sprintf(`
 		SELECT COUNT(*) FROM %s

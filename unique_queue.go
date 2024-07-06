@@ -9,10 +9,12 @@ import (
 	"github.com/mattdeak/godq/internal"
 )
 
+// UniqueQueue is a queue that ensures that each item is only processed once.
 type UniqueQueue struct {
     baseQueue
 }
 
+// NewUniqueQueue creates a new unique queue.
 func NewUniqueQueue(filePath string) (*UniqueQueue, error) {
 	db, err := internal.InitializeDB(filePath)
 	if err != nil {
@@ -40,6 +42,7 @@ func setupUniqueQueue(db *sql.DB, name string, pollInterval time.Duration) (*Uni
     }, nil
 }
 
+// Enqueue adds an item to the queue.
 func (pq *UniqueQueue) Enqueue(item []byte) error {
     _, err := pq.db.Exec(fmt.Sprintf(`
         INSERT INTO %s (item) VALUES (?)
@@ -53,6 +56,7 @@ func (pq *UniqueQueue) Enqueue(item []byte) error {
     return nil
 }
 
+// Dequeue blocks until an item is available. Uses background context.
 func (pq *UniqueQueue) Dequeue() (Msg, error) {
 	return pq.DequeueCtx(context.Background())
 }
@@ -63,10 +67,15 @@ func (pq *UniqueQueue) DequeueCtx(ctx context.Context) (Msg, error) {
 	return dequeueBlocking(ctx, pq, pq.pollInterval, pq.notifyChan)
 }
 
+
+// TryDequeue attempts to dequeue an item without blocking.
+// If no item is available, it returns an empty Msg and an error.
 func (pq *UniqueQueue) TryDequeue() (Msg, error) {
 	return pq.TryDequeueCtx(context.Background())
 }
 
+// TryDequeueCtx attempts to dequeue an item without blocking using a context.
+// If no item is available, it returns an empty Msg and an error.
 func (pq *UniqueQueue) TryDequeueCtx(ctx context.Context) (Msg, error) {
     row := pq.db.QueryRowContext(ctx, fmt.Sprintf(`
 		WITH oldest AS (
@@ -91,6 +100,7 @@ func (pq *UniqueQueue) TryDequeueCtx(ctx context.Context) (Msg, error) {
 	}, nil
 }
 
+// Len returns the number of items in the queue.
 func (pq *UniqueQueue) Len() (int, error) {
     row := pq.db.QueryRow(fmt.Sprintf(`
         SELECT COUNT(*) FROM %s

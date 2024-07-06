@@ -200,5 +200,6 @@ func setupTestUniqueAckQueue(t *testing.T) *godq.UniqueAckQueue {
 	if err != nil {
 		t.Fatalf("Failed to create test queue: %v", err)
 	}
+
 	return q
 }

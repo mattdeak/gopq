@@ -11,6 +11,7 @@ type SimpleQueue struct {
     baseQueue
 }
 
+// NewSimpleQueue creates a new simple queue.
 func NewSimpleQueue(filePath string) (*SimpleQueue, error) {
 	dbPath := fmt.Sprintf("file:%s?_journal_mode=WAL", filePath)
 	db, err := sql.Open("sqlite3", dbPath)
@@ -40,6 +41,7 @@ func setupSimpleQueue(db *sql.DB, name string, pollInterval time.Duration) (*Sim
     }, nil
 }
 
+// Enqueue adds an item to the queue.
 func (pq *SimpleQueue) Enqueue(item []byte) error {
     _, err := pq.db.Exec(fmt.Sprintf(`
         INSERT INTO %s (item) VALUES (?)
@@ -53,21 +55,25 @@ func (pq *SimpleQueue) Enqueue(item []byte) error {
     return nil
 }
 
+// Dequeue blocks until an item is available. Uses background context.
 func (pq *SimpleQueue) Dequeue() (Msg, error) {
 	return pq.DequeueCtx(context.Background())
 }
 
 // Dequeue blocks until an item is available or the context is canceled.
+// If the context is canceled, it returns an empty Msg and an error.
 func (pq *SimpleQueue) DequeueCtx(ctx context.Context) (Msg, error) {
 	return dequeueBlocking(ctx, pq, pq.pollInterval, pq.notifyChan)
 }
 
+// TryDequeue attempts to dequeue an item without blocking.
+// If no item is available, it returns an empty Msg and an error.
 func (pq *SimpleQueue) TryDequeue() (Msg, error) {
 	return pq.TryDequeueCtx(context.Background())
 }
 
-// TryDequeue attempts to dequeue an item without blocking.
-// Will return sql.ErrNoRows if there are no items available to dequeue.
+// TryDequeueCtx attempts to dequeue an item without blocking using a context.
+// If no item is available, it returns an empty Msg and an error.
 func (pq *SimpleQueue) TryDequeueCtx(ctx context.Context) (Msg, error) {
     row := pq.db.QueryRow(fmt.Sprintf(`
 		WITH oldest AS (
@@ -94,6 +100,7 @@ func (pq *SimpleQueue) TryDequeueCtx(ctx context.Context) (Msg, error) {
 	}, nil
 }
 
+// Len returns the number of items in the queue.
 func (pq *SimpleQueue) Len() (int, error) {
     row := pq.db.QueryRow(fmt.Sprintf(`
         SELECT COUNT(*) FROM %s WHERE processed_at IS NULL
