@@ -1,4 +1,4 @@
-package gopq
+package godq
 
 import "time"
 

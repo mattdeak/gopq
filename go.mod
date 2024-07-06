@@ -1,4 +1,4 @@
-module github.com/mattdeak/gopq
+module github.com/mattdeak/godq
 
 go 1.22.5
 

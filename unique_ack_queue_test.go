@@ -1,4 +1,4 @@
-package gopq_test
+package godq_test
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mattdeak/gopq"
+	"github.com/mattdeak/godq"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -14,7 +14,7 @@ func TestNewUniqueAckQueue(t *testing.T) {
 	tempFile := tempFilePath(t)
 	defer os.Remove(tempFile)
 
-	q, err := gopq.NewUniqueAckQueue(tempFile, gopq.AckOpts{AckTimeout: time.Second})
+	q, err := godq.NewUniqueAckQueue(tempFile, godq.AckOpts{AckTimeout: time.Second})
 	if err != nil {
 		t.Fatalf("NewUniqueAckQueue() error = %v", err)
 	}
@@ -190,13 +190,13 @@ func TestUniqueAckQueue_Len(t *testing.T) {
 	}
 }
 
-func setupTestUniqueAckQueue(t *testing.T) *gopq.UniqueAckQueue {
+func setupTestUniqueAckQueue(t *testing.T) *godq.UniqueAckQueue {
 	tempFile := tempFilePath(t)
 	t.Cleanup(func() { os.Remove(tempFile) })
 
 	// Set ack timeout to a very long time in the future
 	// so should never break unless we force it to
-	q, err := gopq.NewUniqueAckQueue(tempFile, gopq.AckOpts{AckTimeout: time.Hour * 24 * 365 * 100}) // 100 years
+	q, err := godq.NewUniqueAckQueue(tempFile, godq.AckOpts{AckTimeout: time.Hour * 24 * 365 * 100}) // 100 years
 	if err != nil {
 		t.Fatalf("Failed to create test queue: %v", err)
 	}

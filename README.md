@@ -1,6 +1,6 @@
-# GoPQ: Go Persistent Queue
+# godq: Go Disk Queue
 
-GoPQ is a lightweight, persistent queue implementation in Go, using SQLite as the underlying storage mechanism. It provides various queue types to suit different use cases, including simple queues, acknowledged queues, and unique item queues.
+godq is a lightweight, persistent queue implementation in Go, using SQLite as the underlying storage mechanism. It provides various queue types to suit different use cases, including simple queues, acknowledged queues, and unique item queues.
 
 ## Features
 
@@ -16,10 +16,10 @@ GoPQ is a lightweight, persistent queue implementation in Go, using SQLite as th
 
 ## Installation
 
-To use GoPQ in your Go project, run:
+To use godq in your Go project, run:
 
 ```
-go get github.com/mattdeak/gopq
+go get github.com/mattdeak/godq
 ```
 
 Make sure you have SQLite installed on your system.
@@ -31,10 +31,10 @@ Here are some examples of how to use different queue types:
 ### Simple Queue
 
 ```go
-import "github.com/mattdeak/gopq"
+import "github.com/mattdeak/godq"
 
 // Create a new simple queue
-queue, err := gopq.NewSimpleQueue("queue.db")
+queue, err := godq.NewSimpleQueue("queue.db")
 if err != nil {
     // Handle error
 }
@@ -56,10 +56,10 @@ fmt.Println(string(msg.Item))
 ### Acknowledged Queue
 
 ```go
-import "github.com/mattdeak/gopq"
+import "github.com/mattdeak/godq"
 
 // Create a new acknowledged queue with a 30-second ack timeout
-queue, err := gopq.NewAckQueue("ack_queue.db", gopq.AckOpts{AckTimeout: 30 * time.Second})
+queue, err := godq.NewAckQueue("ack_queue.db", godq.AckOpts{AckTimeout: 30 * time.Second})
 if err != nil {
     // Handle error
 }
@@ -88,10 +88,10 @@ if err != nil {
 ### Unique Queue
 
 ```go
-import "github.com/mattdeak/gopq"
+import "github.com/mattdeak/godq"
 
 // Create a new unique queue
-queue, err := gopq.NewUniqueQueue("unique_queue.db")
+queue, err := godq.NewUniqueQueue("unique_queue.db")
 if err != nil {
     // Handle error
 }

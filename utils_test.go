@@ -1,4 +1,4 @@
-package gopq_test
+package godq_test
 
 import (
 	"path/filepath"

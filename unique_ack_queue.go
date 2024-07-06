@@ -1,4 +1,4 @@
-package gopq
+package godq
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mattdeak/gopq/internal"
+	"github.com/mattdeak/godq/internal"
 )
 
 type UniqueAckQueue struct {
