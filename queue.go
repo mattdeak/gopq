@@ -75,6 +75,8 @@ type Msg struct {
 	Item []byte
 }
 
+// Queue represents the basic queue structure.
+// It contains the database connection, queue name, and other necessary fields for queue operations.
 type Queue struct {
 	db           *sql.DB
 	name         string
@@ -100,10 +102,14 @@ type ackQueries struct {
 	ack string
 }
 
+// Close closes the database connection associated with the queue.
+// It should be called when the queue is no longer needed to free up resources.
 func (q *Queue) Close() error {
 	return q.db.Close()
 }
 
+// Enqueue adds an item to the queue.
+// It returns an error if the operation fails.
 func (q *Queue) Enqueue(item []byte) error {
 	_, err := q.db.Exec(q.queries.enqueue, item)
 	if err != nil {
@@ -139,6 +145,7 @@ func (q *Queue) TryDequeueCtx(ctx context.Context) (Msg, error) {
 }
 
 // Len returns the number of items in the queue.
+// It returns the count and any error encountered during the operation.
 func (q *Queue) Len() (int, error) {
 	row := q.db.QueryRow(q.queries.len)
 	var count int
@@ -146,27 +153,41 @@ func (q *Queue) Len() (int, error) {
 	return count, err
 }
 
+// SetDeadLetterQueue sets the dead letter queue for this AcknowledgeableQueue.
+// Items that exceed the maximum retry count will be moved to this queue.
 func (q *AcknowledgeableQueue) SetDeadLetterQueue(dlq Enqueuer) {
 	q.ackOpts.DeadLetterQueue = dlq
 }
 
+// Ack acknowledges that an item has been successfully processed.
+// It takes the ID of the message to acknowledge and returns an error if the operation fails.
 func (q *AcknowledgeableQueue) Ack(id int64) error {
 	_, err := q.db.Exec(q.ackQueries.ack, id)
 	return err
 }
 
+// Dequeue removes and returns the next item from the queue.
+// It blocks if the queue is empty until an item becomes available.
+// It uses a background context internally.
 func (q *AcknowledgeableQueue) Dequeue() (Msg, error) {
 	return q.DequeueCtx(context.Background())
 }
 
+// DequeueCtx removes and returns the next item from the queue.
+// It blocks if the queue is empty until an item becomes available or the context is cancelled.
 func (q *AcknowledgeableQueue) DequeueCtx(ctx context.Context) (Msg, error) {
 	return dequeueBlocking(ctx, q, q.pollInterval, q.notifyChan)
 }
 
+// TryDequeue attempts to remove and return the next item from the queue.
+// It returns immediately, even if the queue is empty.
+// It uses a background context internally.
 func (q *AcknowledgeableQueue) TryDequeue() (Msg, error) {
 	return q.TryDequeueCtx(context.Background())
 }
 
+// TryDequeueCtx attempts to remove and return the next item from the queue.
+// It returns immediately if an item is available, or waits until the context is cancelled.
 func (q *AcknowledgeableQueue) TryDequeueCtx(ctx context.Context) (Msg, error) {
 	newAckDeadline := time.Now().Add(q.ackOpts.AckTimeout)
 	row := q.db.QueryRowContext(ctx, q.queries.tryDequeue, newAckDeadline)
@@ -176,10 +197,17 @@ func (q *AcknowledgeableQueue) TryDequeueCtx(ctx context.Context) (Msg, error) {
 	return handleDequeueResult(id, item, err)
 }
 
+// Nack indicates that an item processing has failed and should be requeued.
+// It takes the ID of the message to negative acknowledge.
+// Returns an error if the operation fails or the message doesn't exist.
 func (q *AcknowledgeableQueue) Nack(id int64) error {
 	return nackImpl(q.db, q.name, id, q.ackOpts, q.ackOpts.DeadLetterQueue)
 }
 
+// ExpireAck expires the acknowledgement deadline for an item,
+// which requeues it to the front of the queue.
+// It takes the ID of the message to expire the acknowledgement deadline for.
+// Returns an error if the operation fails or the message doesn't exist.
 func (q *AcknowledgeableQueue) ExpireAck(id int64) error {
 	return expireAckDeadline(q.db, q.name, id)
 }
