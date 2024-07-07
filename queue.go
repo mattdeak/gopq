@@ -115,9 +115,12 @@ func (q *Queue) Enqueue(item []byte) error {
 	if err != nil {
 		return err
 	}
-	go func() {
-		q.notifyChan <- struct{}{}
-	}()
+
+	// Send a notification to the channel to wake up the dequeueing goroutine.
+	select {
+	case q.notifyChan <- struct{}{}:
+	default:
+	}
 	return nil
 }
 
