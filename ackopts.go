@@ -10,8 +10,8 @@ const (
 )
 
 type AckOpts struct {
-	AckTimeout time.Duration
-	MaxRetries    int
-	RetryBackoff  time.Duration
+	AckTimeout      time.Duration
+	MaxRetries      int
+	RetryBackoff    time.Duration
 	DeadLetterQueue Enqueuer
 }

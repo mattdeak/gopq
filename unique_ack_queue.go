@@ -12,7 +12,7 @@ import (
 // UniqueAckQueue is a acknowledgeable queue that ensures that each item is only processed once.
 type UniqueAckQueue struct {
 	baseQueue
-	opts AckOpts
+	opts            AckOpts
 	deadLetterQueue Enqueuer
 }
 
@@ -50,8 +50,8 @@ func setupUniqueAckQueue(db *sql.DB, name string, pollInterval time.Duration, op
 
 	notifyChan := make(chan struct{}, 1)
 	return &UniqueAckQueue{
-		baseQueue:  baseQueue{db: db, name: name, pollInterval: pollInterval, notifyChan: notifyChan},
-		opts: opts,
+		baseQueue:       baseQueue{db: db, name: name, pollInterval: pollInterval, notifyChan: notifyChan},
+		opts:            opts,
 		deadLetterQueue: nil,
 	}, nil
 }
@@ -80,7 +80,6 @@ func (uaq *UniqueAckQueue) Dequeue() (Msg, error) {
 func (uaq *UniqueAckQueue) DequeueCtx(ctx context.Context) (Msg, error) {
 	return dequeueBlocking(ctx, uaq, uaq.pollInterval, uaq.notifyChan)
 }
-
 
 // TryDequeue attempts to dequeue an item without blocking.
 // If no item is available, it returns an empty Msg and an error.
@@ -139,7 +138,6 @@ func (uaq *UniqueAckQueue) Ack(id int64) error {
 	return nil
 }
 
-
 // SetDeadLetterQueue sets the dead letter queue. Only requires the queuer to be an Enqueuer.
 // If present, failed messages will be added to the dead letter queue.
 func (uaq *UniqueAckQueue) SetDeadLetterQueue(dlq Enqueuer) {
@@ -150,7 +148,6 @@ func (uaq *UniqueAckQueue) SetDeadLetterQueue(dlq Enqueuer) {
 func (uaq *UniqueAckQueue) Nack(id int64) error {
 	return nackImpl(uaq.db, uaq.name, id, uaq.opts, uaq.deadLetterQueue)
 }
-
 
 func (uaq *UniqueAckQueue) ExpireAck(id int64) error {
 	return expireAckDeadline(uaq.db, uaq.name, id)

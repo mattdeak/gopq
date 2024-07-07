@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-
 func nackImpl(db *sql.DB, tableName string, id int64, opts AckOpts, deadLetterQueue Enqueuer) error {
 	tx, err := db.Begin()
 	if err != nil {

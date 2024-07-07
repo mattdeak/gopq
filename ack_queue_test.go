@@ -156,20 +156,19 @@ func TestAckQueue_Len(t *testing.T) {
 	}
 }
 
-
 func TestAckQueue_Nack(t *testing.T) {
 	tests := []struct {
-		name           string
-		maxRetries     int
-		retryBackoff   time.Duration
+		name            string
+		maxRetries      int
+		retryBackoff    time.Duration
 		deadLetterQueue bool
-		operations     func(*testing.T, *godq.AckQueue, *godq.AckQueue)
-		expectedResult func(*testing.T, *godq.AckQueue, *godq.AckQueue)
+		operations      func(*testing.T, *godq.AckQueue, *godq.AckQueue)
+		expectedResult  func(*testing.T, *godq.AckQueue, *godq.AckQueue)
 	}{
 		{
-			name:           "No retries, no dead letter queue",
-			maxRetries:     0,
-			retryBackoff:   time.Second,
+			name:            "No retries, no dead letter queue",
+			maxRetries:      0,
+			retryBackoff:    time.Second,
 			deadLetterQueue: false,
 			operations: func(t *testing.T, q, dlq *godq.AckQueue) {
 				err := q.Enqueue([]byte("test"))
@@ -186,9 +185,9 @@ func TestAckQueue_Nack(t *testing.T) {
 			},
 		},
 		{
-			name:           "With retries, no dead letter queue",
-			maxRetries:     2,
-			retryBackoff:   time.Millisecond,
+			name:            "With retries, no dead letter queue",
+			maxRetries:      2,
+			retryBackoff:    time.Millisecond,
 			deadLetterQueue: false,
 			operations: func(t *testing.T, q, dlq *godq.AckQueue) {
 				err := q.Enqueue([]byte("test"))
@@ -208,9 +207,9 @@ func TestAckQueue_Nack(t *testing.T) {
 			},
 		},
 		{
-			name:           "With retries and dead letter queue",
-			maxRetries:     1,
-			retryBackoff:   time.Millisecond,
+			name:            "With retries and dead letter queue",
+			maxRetries:      1,
+			retryBackoff:    time.Millisecond,
 			deadLetterQueue: true,
 			operations: func(t *testing.T, q, dlq *godq.AckQueue) {
 				err := q.Enqueue([]byte("test"))
@@ -229,9 +228,9 @@ func TestAckQueue_Nack(t *testing.T) {
 			},
 		},
 		{
-			name:           "Infinite retries",
-			maxRetries:     -1,
-			retryBackoff:   time.Millisecond,
+			name:            "Infinite retries",
+			maxRetries:      -1,
+			retryBackoff:    time.Millisecond,
 			deadLetterQueue: false,
 			operations: func(t *testing.T, q, dlq *godq.AckQueue) {
 				err := q.Enqueue([]byte("test"))
@@ -249,9 +248,9 @@ func TestAckQueue_Nack(t *testing.T) {
 			},
 		},
 		{
-			name:           "Nack with expired ack deadline",
-			maxRetries:     1,
-			retryBackoff:   time.Millisecond,
+			name:            "Nack with expired ack deadline",
+			maxRetries:      1,
+			retryBackoff:    time.Millisecond,
 			deadLetterQueue: false,
 			operations: func(t *testing.T, q, dlq *godq.AckQueue) {
 				err := q.Enqueue([]byte("test"))

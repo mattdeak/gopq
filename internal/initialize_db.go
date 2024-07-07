@@ -5,7 +5,6 @@ import (
 	"fmt"
 )
 
-
 func InitializeDB(fileName string) (*sql.DB, error) {
 	dbPath := fmt.Sprintf("file:%s?_journal_mode=WAL", fileName)
 	db, err := sql.Open("sqlite3", dbPath)

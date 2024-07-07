@@ -144,5 +144,3 @@ func setupTestUniqueQueue(t *testing.T) *godq.UniqueQueue {
 	}
 	return q
 }
-	
-	

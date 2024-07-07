@@ -12,7 +12,7 @@ import (
 // AckQueue is a queue that provides the ability to acknowledge messages.
 type AckQueue struct {
 	baseQueue
-	opts AckOpts
+	opts            AckOpts
 	deadLetterQueue Enqueuer
 }
 
@@ -31,7 +31,7 @@ func NewAckQueue(filePath string, opts AckOpts) (*AckQueue, error) {
 }
 
 func setupAckQueue(db *sql.DB, name string, pollInterval time.Duration, opts AckOpts) (*AckQueue, error) {
-    _, err := db.Exec(fmt.Sprintf(`
+	_, err := db.Exec(fmt.Sprintf(`
         CREATE TABLE IF NOT EXISTS %s (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             item BLOB NOT NULL,
@@ -43,36 +43,35 @@ func setupAckQueue(db *sql.DB, name string, pollInterval time.Duration, opts Ack
         CREATE INDEX IF NOT EXISTS idx_processed ON %s(processed_at);
         CREATE INDEX IF NOT EXISTS idx_ack_deadline ON %s(ack_deadline);
     `, name, name, name))
-    if err != nil {
-        return nil, err
-    }
+	if err != nil {
+		return nil, err
+	}
 
 	notifyChan := make(chan struct{}, 1)
-    return &AckQueue{
-        baseQueue: baseQueue{db: db, name: name, pollInterval: pollInterval, notifyChan: notifyChan},
-		opts: opts,
-    }, nil
+	return &AckQueue{
+		baseQueue: baseQueue{db: db, name: name, pollInterval: pollInterval, notifyChan: notifyChan},
+		opts:      opts,
+	}, nil
 }
 
 // Enqueue adds an item to the queue.
 func (pq *AckQueue) Enqueue(item []byte) error {
-    _, err := pq.db.Exec(fmt.Sprintf(`
+	_, err := pq.db.Exec(fmt.Sprintf(`
         INSERT INTO %s (item) VALUES (?)
     `, pq.name), item)
-    if err != nil {
-        return err
-    }
+	if err != nil {
+		return err
+	}
 	go func() {
 		pq.notifyChan <- struct{}{}
 	}()
-    return nil
+	return nil
 }
 
 // Dequeue blocks until an item is available. It uses a background context.
 func (pq *AckQueue) Dequeue() (Msg, error) {
 	return pq.DequeueCtx(context.Background())
 }
-
 
 // DequeueCtx blocks until an item is available or the context is canceled.
 func (pq *AckQueue) DequeueCtx(ctx context.Context) (Msg, error) {
@@ -87,7 +86,7 @@ func (pq *AckQueue) TryDequeue() (Msg, error) {
 // TryDequeueCtx attempts to dequeue an item from the queue.
 // It returns the item and its ID, or an error if the item could not be dequeued.
 func (pq *AckQueue) TryDequeueCtx(ctx context.Context) (Msg, error) {
-    row := pq.db.QueryRowContext(ctx, fmt.Sprintf(`
+	row := pq.db.QueryRowContext(ctx, fmt.Sprintf(`
 		WITH oldest AS (
 			SELECT id, item
 			FROM %s
@@ -100,14 +99,14 @@ func (pq *AckQueue) TryDequeueCtx(ctx context.Context) (Msg, error) {
 		WHERE id = (SELECT id FROM oldest)
 		RETURNING id, item
     `, pq.name, pq.name), time.Now().Add(pq.opts.AckTimeout))
-    var id int64
-    var item []byte
+	var id int64
+	var item []byte
 
-    err := row.Scan(&id, &item)
+	err := row.Scan(&id, &item)
 	if err != nil {
 		return Msg{}, fmt.Errorf("failed to dequeue: %w", err)
 	}
-    return Msg{
+	return Msg{
 		ID:   id,
 		Item: item,
 	}, nil
@@ -154,10 +153,10 @@ func (pq *AckQueue) ExpireAck(id int64) error {
 
 // Len returns the number of items in the queue.
 func (pq *AckQueue) Len() (int, error) {
-    row := pq.db.QueryRow(fmt.Sprintf(`
+	row := pq.db.QueryRow(fmt.Sprintf(`
         SELECT COUNT(*) FROM %s WHERE processed_at IS NULL AND (ack_deadline < CURRENT_TIMESTAMP OR ack_deadline IS NULL)
     `, pq.name))
-    var count int
-    err := row.Scan(&count)
-    return count, err
+	var count int
+	err := row.Scan(&count)
+	return count, err
 }
