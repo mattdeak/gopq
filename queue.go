@@ -43,7 +43,7 @@ type Dequeuer interface {
 // Queue represents a durable queue interface.
 // It provides methods for enqueueing and dequeueing items,
 // with both blocking and non-blocking operations.
-type Queue interface {
+type Queuer interface {
 	Enqueuer
 	Dequeuer
 	Close() error
@@ -52,7 +52,7 @@ type Queue interface {
 // AckableQueue extends the DQueue interface with acknowledgement capabilities.
 // It allows for explicit acknowledgement or negative acknowledgement of processed items.
 type AckableQueue interface {
-	Queue
+	Queuer
 
 	// Ack acknowledges that an item has been successfully processed.
 	// It takes the ID of the message to acknowledge.
@@ -75,13 +75,114 @@ type Msg struct {
 	Item []byte
 }
 
-type baseQueue struct {
+type Queue struct {
 	db           *sql.DB
 	name         string
 	pollInterval time.Duration
 	notifyChan   chan struct{}
+	queries baseQueries
 }
 
-func (q *baseQueue) Close() error {
+type AcknowledgeableQueue struct {
+	Queue
+	ackOpts AckOpts
+	ackQueries ackQueries
+}
+
+type baseQueries struct {
+	createTable string
+	enqueue string
+	tryDequeue string
+	len string
+}
+
+type ackQueries struct {
+	ack string
+}
+
+func (q *Queue) Close() error {
 	return q.db.Close()
+}
+
+
+func (q *Queue) Enqueue(item []byte) error {
+	_, err := q.db.Exec(q.queries.enqueue, item)
+	if err != nil {
+		return err
+	}
+	go func() {
+		q.notifyChan <- struct{}{}
+	}()
+	return nil
+}
+
+
+// Dequeue blocks until an item is available. Uses background context.
+func (q *Queue) Dequeue() (Msg, error) {
+	return q.DequeueCtx(context.Background())
+}
+
+// Dequeue blocks until an item is available or the context is canceled.
+// If the context is canceled, it returns an empty Msg and an error.
+func (q *Queue) DequeueCtx(ctx context.Context) (Msg, error) {
+	return dequeueBlocking(ctx, q, q.pollInterval, q.notifyChan)
+}
+
+func (q *Queue) TryDequeue() (Msg, error) {
+	return q.TryDequeueCtx(context.Background())
+}
+
+func (q *Queue) TryDequeueCtx(ctx context.Context) (Msg, error) {
+	row := q.db.QueryRow(q.queries.tryDequeue)
+	var id int64
+	var item []byte
+	err := row.Scan(&id, &item)
+	return handleDequeueResult(id, item, err)
+}
+
+
+// Len returns the number of items in the queue.
+func (q *Queue) Len() (int, error) {
+	row := q.db.QueryRow(q.queries.len)
+	var count int
+	err := row.Scan(&count)
+	return count, err
+}
+
+func (q *AcknowledgeableQueue) SetDeadLetterQueue(dlq Enqueuer) {
+	q.ackOpts.DeadLetterQueue = dlq
+}
+
+func (q *AcknowledgeableQueue) Ack(id int64) error {
+	_, err := q.db.Exec(q.ackQueries.ack, id)
+	return err
+}
+
+func (q *AcknowledgeableQueue) Dequeue() (Msg, error) {
+	return q.DequeueCtx(context.Background())
+}
+
+func (q *AcknowledgeableQueue) DequeueCtx(ctx context.Context) (Msg, error) {
+	return dequeueBlocking(ctx, q, q.pollInterval, q.notifyChan)
+}
+
+func (q *AcknowledgeableQueue) TryDequeue() (Msg, error) {
+	return q.TryDequeueCtx(context.Background())
+}
+
+func (q* AcknowledgeableQueue) TryDequeueCtx(ctx context.Context) (Msg, error) {
+	ack_deadline := time.Now().Add(q.ackOpts.AckTimeout)
+	row := q.db.QueryRowContext(ctx, q.queries.tryDequeue, ack_deadline)
+	var id int64
+	var item []byte
+	err := row.Scan(&id, &item)
+	return handleDequeueResult(id, item, err)
+}
+
+func (q *AcknowledgeableQueue) Nack(id int64) error {
+	return nackImpl(q.db, q.name, id, q.ackOpts, q.ackOpts.DeadLetterQueue)
+}
+
+func (q *AcknowledgeableQueue) ExpireAck(id int64) error {
+	return expireAckDeadline(q.db, q.name, id)
 }

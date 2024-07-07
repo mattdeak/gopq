@@ -121,7 +121,7 @@ func TestSimpleQueue_Len(t *testing.T) {
 	}
 }
 
-func setupTestQueue(t *testing.T) *godq.SimpleQueue {
+func setupTestQueue(t *testing.T) *godq.Queue {
 	tempFile := tempFilePath(t)
 	t.Cleanup(func() { os.Remove(tempFile) })
 

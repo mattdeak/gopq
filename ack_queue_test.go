@@ -161,14 +161,14 @@ func TestAckQueue_Nack(t *testing.T) {
 		name            string
 		maxRetries      int
 		deadLetterQueue bool
-		operations      func(*testing.T, *godq.AckQueue, *godq.AckQueue)
-		expectedResult  func(*testing.T, *godq.AckQueue, *godq.AckQueue)
+		operations      func(*testing.T, *godq.AcknowledgeableQueue, *godq.AcknowledgeableQueue)
+		expectedResult  func(*testing.T, *godq.AcknowledgeableQueue, *godq.AcknowledgeableQueue)
 	}{
 		{
 			name:            "No retries, no dead letter queue",
 			maxRetries:      0,
 			deadLetterQueue: false,
-			operations: func(t *testing.T, q, dlq *godq.AckQueue) {
+			operations: func(t *testing.T, q, dlq *godq.AcknowledgeableQueue) {
 				err := q.Enqueue([]byte("test"))
 				require.NoError(t, err)
 				msg, err := q.TryDequeue()
@@ -178,7 +178,7 @@ func TestAckQueue_Nack(t *testing.T) {
 				err = q.ExpireAck(msg.ID)
 				require.NoError(t, err)
 			},
-			expectedResult: func(t *testing.T, q, dlq *godq.AckQueue) {
+			expectedResult: func(t *testing.T, q, dlq *godq.AcknowledgeableQueue) {
 				_, err := q.TryDequeue()
 				assert.Error(t, err) // Item should be removed
 				assert.Equal(t, 0, queueLength(t, q))
@@ -188,7 +188,7 @@ func TestAckQueue_Nack(t *testing.T) {
 			name:            "With retries, no dead letter queue",
 			maxRetries:      2,
 			deadLetterQueue: false,
-			operations: func(t *testing.T, q, dlq *godq.AckQueue) {
+			operations: func(t *testing.T, q, dlq *godq.AcknowledgeableQueue) {
 				err := q.Enqueue([]byte("test"))
 				require.NoError(t, err)
 				for i := 0; i < 3; i++ {
@@ -200,7 +200,7 @@ func TestAckQueue_Nack(t *testing.T) {
 					require.NoError(t, err)
 				}
 			},
-			expectedResult: func(t *testing.T, q, dlq *godq.AckQueue) {
+			expectedResult: func(t *testing.T, q, dlq *godq.AcknowledgeableQueue) {
 				_, err := q.TryDequeue()
 				assert.Error(t, err) // Item should be removed after max retries
 				assert.Equal(t, 0, queueLength(t, q))
@@ -210,7 +210,7 @@ func TestAckQueue_Nack(t *testing.T) {
 			name:            "With retries and dead letter queue",
 			maxRetries:      1,
 			deadLetterQueue: true,
-			operations: func(t *testing.T, q, dlq *godq.AckQueue) {
+			operations: func(t *testing.T, q, dlq *godq.AcknowledgeableQueue) {
 				err := q.Enqueue([]byte("test"))
 				require.NoError(t, err)
 				for i := 0; i < 2; i++ {
@@ -222,7 +222,7 @@ func TestAckQueue_Nack(t *testing.T) {
 					require.NoError(t, err)
 				}
 			},
-			expectedResult: func(t *testing.T, q, dlq *godq.AckQueue) {
+			expectedResult: func(t *testing.T, q, dlq *godq.AcknowledgeableQueue) {
 				assert.Equal(t, 0, queueLength(t, q))
 				assert.Equal(t, 1, queueLength(t, dlq))
 			},
@@ -231,7 +231,7 @@ func TestAckQueue_Nack(t *testing.T) {
 			name:            "Infinite retries",
 			maxRetries:      -1,
 			deadLetterQueue: false,
-			operations: func(t *testing.T, q, dlq *godq.AckQueue) {
+			operations: func(t *testing.T, q, dlq *godq.AcknowledgeableQueue) {
 				err := q.Enqueue([]byte("test"))
 				require.NoError(t, err)
 				for i := 0; i < 10; i++ {
@@ -243,7 +243,7 @@ func TestAckQueue_Nack(t *testing.T) {
 					require.NoError(t, err)
 				}
 			},
-			expectedResult: func(t *testing.T, q, dlq *godq.AckQueue) {
+			expectedResult: func(t *testing.T, q, dlq *godq.AcknowledgeableQueue) {
 				assert.Equal(t, 1, queueLength(t, q))
 			},
 		},
@@ -251,7 +251,7 @@ func TestAckQueue_Nack(t *testing.T) {
 			name:            "Nack with expired ack deadline",
 			maxRetries:      1,
 			deadLetterQueue: false,
-			operations: func(t *testing.T, q, dlq *godq.AckQueue) {
+			operations: func(t *testing.T, q, dlq *godq.AcknowledgeableQueue) {
 				err := q.Enqueue([]byte("test"))
 				require.NoError(t, err)
 				msg, err := q.TryDequeue()
@@ -261,7 +261,7 @@ func TestAckQueue_Nack(t *testing.T) {
 				err = q.Nack(msg.ID)
 				assert.Error(t, err) // Expect an error for expired ack deadline
 			},
-			expectedResult: func(t *testing.T, q, dlq *godq.AckQueue) {
+			expectedResult: func(t *testing.T, q, dlq *godq.AcknowledgeableQueue) {
 				// If the ack expires, the item was effectively never dequeued.
 				assert.Equal(t, 1, queueLength(t, q))
 			},
@@ -276,7 +276,7 @@ func TestAckQueue_Nack(t *testing.T) {
 				RetryBackoff: time.Millisecond, // This doesn't matter as we're using ExpireAck
 			})
 
-			var dlq *godq.AckQueue
+			var dlq *godq.AcknowledgeableQueue
 			if tt.deadLetterQueue {
 				dlq = setupDefaultTestAckQueue(t)
 				q.SetDeadLetterQueue(dlq)
@@ -288,13 +288,13 @@ func TestAckQueue_Nack(t *testing.T) {
 	}
 }
 
-func queueLength(t *testing.T, q *godq.AckQueue) int {
+func queueLength(t *testing.T, q *godq.AcknowledgeableQueue) int {
 	length, err := q.Len()
 	require.NoError(t, err)
 	return length
 }
 
-func setupDefaultTestAckQueue(t *testing.T) *godq.AckQueue {
+func setupDefaultTestAckQueue(t *testing.T) *godq.AcknowledgeableQueue {
 	return setupTestAckQueue(t, godq.AckOpts{
 		AckTimeout:   time.Hour * 999,
 		MaxRetries:   0,
@@ -302,7 +302,7 @@ func setupDefaultTestAckQueue(t *testing.T) *godq.AckQueue {
 	})
 }
 
-func setupTestAckQueue(t *testing.T, opts godq.AckOpts) *godq.AckQueue {
+func setupTestAckQueue(t *testing.T, opts godq.AckOpts) *godq.AcknowledgeableQueue {
 	tempFile := tempFilePath(t)
 	t.Cleanup(func() { os.Remove(tempFile) })
 
