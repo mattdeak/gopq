@@ -62,32 +62,36 @@ fmt.Println(string(msg.Item))
 
 ```go
 import "github.com/mattdeak/godq"
-
-// Create a new acknowledged queue with a 30-second ack timeout
-queue, err := godq.NewAckQueue("ack_queue.db", godq.AckOpts{AckTimeout: 30 * time.Second})
+// Create a new acknowledged queue with custom options
+queue, err := godq.NewAckQueue("ack_queue.db", godq.AckOpts{
+AckTimeout: 30 time.Second,
+MaxRetries: 3,
+RetryBackoff: 5 time.Second,
+})
 if err != nil {
-    // Handle error
+// Handle error
 }
-
 // Enqueue an item
 err = queue.Enqueue([]byte("Process me"))
 if err != nil {
-    // Handle error
+// Handle error
 }
-
 // Dequeue an item
 msg, err := queue.Dequeue()
 if err != nil {
-    // Handle error
+// Handle error
 }
-
 // Process the item...
-
-// Acknowledge the item
+// Acknowledge the item if processing was successful
 err = queue.Ack(msg.ID)
 if err != nil {
-    // Handle error
+// Handle error
 }
+// Or, if processing failed, negative acknowledge the item
+err = queue.Nack(msg.ID)
+if err != nil {
+// Handle error
+}// Acknowledge the item if processing was successful
 ```
 
 ### Unique Queue
@@ -110,6 +114,7 @@ queue.Enqueue([]byte("unique_item_2"))
 msg1, _ := queue.Dequeue()
 msg2, _ := queue.Dequeue()
 msg3, err := queue.TryDequeue() // This will return an error (queue is empty)
+
 ```
 
 ## Queue Types
@@ -118,6 +123,64 @@ msg3, err := queue.TryDequeue() // This will return an error (queue is empty)
 2. **AckQueue**: Queue with acknowledgment support. Items must be acknowledged after processing, or they will be requeued after a timeout.
 3. **UniqueQueue**: Queue that only allows unique items. Duplicate enqueue attempts are silently ignored.
 4. **UniqueAckQueue**: Combination of UniqueQueue and AckQueue. Ensures unique items with acknowledgment support.
+
+## Advanced Features
+### Dead Letter Queue
+For AckQueue and UniqueAckQueue, you can set up a dead letter queue to handle messages that exceed the maximum retry count:
+```go
+mainQueue, := godq.NewAckQueue("main_queue.db", godq.AckOpts{
+MaxRetries: 3,
+})
+deadLetterQueue, := godq.NewSimpleQueue("dead_letter.db") // Can be any Enqueuer (supports Enqueue([]byte))
+mainQueue.SetDeadLetterQueue(deadLetterQueue)
+```
+
+Your dead letter queues can be any queue type or anything that supports the Enqueuer interface.
+For example, you could make a simple logging dead letter queue.
+
+```go
+type LogEnqueuer struct {}
+
+func (l *LogEnqueuer) Enqueue(item []byte) error {
+    log.Println(string(item))
+    return nil
+}
+
+...
+
+queue.SetDeadLetterQueue(LogEnqueuer {})
+
+```
+
+Since all queues can be used as dead letter queues, you could, if you wanted too, put dead letter queues on your dead letter queues.
+See the examples directory for more.
+
+
+### Configurable Retry Mechanism
+
+AckQueue and UniqueAckQueue support configurable retry mechanisms:
+
+```go
+queue, := godq.NewAckQueue("queue.db", godq.AckOpts{
+AckTimeout: 1 time.Minute, // Any message that takes longer than 1 minute to ack will be requeued.
+MaxRetries: 5 // 0 for no retries, -1 for infinite retries
+RetryBackoff: 10 time.Second, // Sets a new ack deadline to be the max of (current deadline, now + retry backoff)
+})
+```
+
+## Examples
+
+There are several, more detailed examples demonstrating various features of godq. These examples are located in the `examples` directory at the root of the project. To run an example, navigate to its directory and use `go run main.go`. For instance:
+
+Available examples:
+- Simple Queue Usage: `examples/simple_queue_example`
+- Acknowledged Queue: `examples/ack_queue_example`
+- Unique Queue: `examples/unique_queue_example`
+- Dead Letter Queue: `examples/dead_letter_queue_example`
+- Multiple Tiered Dead Letter Queues: `examples/tiered_dlq_example`
+- Concurrent Queue Usage: `examples/concurrent_queue_example`
+
+Each example demonstrates different features and use cases of godq. We encourage you to explore these examples to better understand how to use the library in your projects.
 
 ## Contributing
 

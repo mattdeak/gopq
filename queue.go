@@ -10,7 +10,7 @@ import (
 
 const (
 	defaultAckTimeout   = 30 * time.Second
-	defaultPollInterval = 100 * time.Millisecond
+	defaultPollInterval = 10 * time.Millisecond
 )
 
 // Enqueuer provides methods for enqueueing items to the queue.

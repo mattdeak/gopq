@@ -9,6 +9,45 @@ import (
 	"github.com/mattdeak/godq/internal"
 )
 
+const (
+	ackCreateTableQuery = `
+        CREATE TABLE IF NOT EXISTS %[1]s (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item BLOB NOT NULL,
+            enqueued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            processed_at TIMESTAMP,
+            ack_deadline TIMESTAMP,
+            retry_count INTEGER DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_processed ON %[1]s(processed_at);
+        CREATE INDEX IF NOT EXISTS idx_ack_deadline ON %[1]s(ack_deadline);
+    `
+	ackEnqueueQuery = `
+        INSERT INTO %s (item) VALUES (?)
+    `
+	ackTryDequeueQuery = `
+		WITH oldest AS (
+			SELECT id, item
+			FROM %[1]s
+			WHERE processed_at IS NULL AND (ack_deadline < CURRENT_TIMESTAMP OR ack_deadline IS NULL)
+			ORDER BY enqueued_at ASC
+			LIMIT 1
+		)
+		UPDATE %[1]s 
+		SET ack_deadline = ?
+		WHERE id = (SELECT id FROM oldest)
+		RETURNING id, item
+    `
+	ackAckQuery = `
+		UPDATE %s 
+		SET processed_at = CURRENT_TIMESTAMP 
+		WHERE id = ? AND ack_deadline >= CURRENT_TIMESTAMP
+	`
+	ackLenQuery = `
+        SELECT COUNT(*) FROM %s WHERE processed_at IS NULL AND (ack_deadline < CURRENT_TIMESTAMP OR ack_deadline IS NULL)
+    `
+)
+
 // AckQueue is a queue that provides the ability to acknowledge messages.
 type AckQueue struct {
 	baseQueue
@@ -17,32 +56,28 @@ type AckQueue struct {
 }
 
 // NewAckQueue creates a new ack queue.
+// If filePath is empty, the queue will be created in memory.
 func NewAckQueue(filePath string, opts AckOpts) (*AckQueue, error) {
 	db, err := internal.InitializeDB(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ack queue: %w", err)
 	}
 
-	queue, err := setupAckQueue(db, "ack_queue", defaultPollInterval, opts)
+	tableName := internal.GetUniqueTableName("ack_queue")
+	err = internal.PrepareDB(db, tableName, ackCreateTableQuery, ackEnqueueQuery, ackTryDequeueQuery, ackAckQuery, ackLenQuery)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ack queue: %w", err)
 	}
-	return queue, nil
+
+	q, err := setupAckQueue(db, tableName, defaultPollInterval, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ack queue: %w", err)
+	}
+	return q, nil
 }
 
 func setupAckQueue(db *sql.DB, name string, pollInterval time.Duration, opts AckOpts) (*AckQueue, error) {
-	_, err := db.Exec(fmt.Sprintf(`
-        CREATE TABLE IF NOT EXISTS %s (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            item BLOB NOT NULL,
-            enqueued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            processed_at TIMESTAMP,
-            ack_deadline TIMESTAMP,
-            retry_count INTEGER DEFAULT 0
-        );
-        CREATE INDEX IF NOT EXISTS idx_processed ON %s(processed_at);
-        CREATE INDEX IF NOT EXISTS idx_ack_deadline ON %s(ack_deadline);
-    `, name, name, name))
+	_, err := db.Exec(fmt.Sprintf(ackCreateTableQuery, name))
 	if err != nil {
 		return nil, err
 	}
@@ -56,9 +91,7 @@ func setupAckQueue(db *sql.DB, name string, pollInterval time.Duration, opts Ack
 
 // Enqueue adds an item to the queue.
 func (pq *AckQueue) Enqueue(item []byte) error {
-	_, err := pq.db.Exec(fmt.Sprintf(`
-        INSERT INTO %s (item) VALUES (?)
-    `, pq.name), item)
+	_, err := pq.db.Exec(fmt.Sprintf(ackEnqueueQuery, pq.name), item)
 	if err != nil {
 		return err
 	}
@@ -86,39 +119,16 @@ func (pq *AckQueue) TryDequeue() (Msg, error) {
 // TryDequeueCtx attempts to dequeue an item from the queue.
 // It returns the item and its ID, or an error if the item could not be dequeued.
 func (pq *AckQueue) TryDequeueCtx(ctx context.Context) (Msg, error) {
-	row := pq.db.QueryRowContext(ctx, fmt.Sprintf(`
-		WITH oldest AS (
-			SELECT id, item
-			FROM %s
-			WHERE processed_at IS NULL AND (ack_deadline < CURRENT_TIMESTAMP OR ack_deadline IS NULL)
-			ORDER BY enqueued_at ASC
-			LIMIT 1
-		)
-		UPDATE %s 
-		SET ack_deadline = ?
-		WHERE id = (SELECT id FROM oldest)
-		RETURNING id, item
-    `, pq.name, pq.name), time.Now().Add(pq.opts.AckTimeout))
+	row := pq.db.QueryRowContext(ctx, fmt.Sprintf(ackTryDequeueQuery, pq.name, pq.name), time.Now().Add(pq.opts.AckTimeout))
 	var id int64
 	var item []byte
-
 	err := row.Scan(&id, &item)
-	if err != nil {
-		return Msg{}, fmt.Errorf("failed to dequeue: %w", err)
-	}
-	return Msg{
-		ID:   id,
-		Item: item,
-	}, nil
+	return handleDequeueResult(id, item, err)
 }
 
 // Ack marks an item as processed.
 func (pq *AckQueue) Ack(id int64) error {
-	res, err := pq.db.Exec(fmt.Sprintf(`
-		UPDATE %s 
-		SET processed_at = CURRENT_TIMESTAMP 
-		WHERE id = ? AND ack_deadline >= CURRENT_TIMESTAMP
-	`, pq.name), id)
+	res, err := pq.db.Exec(fmt.Sprintf(ackAckQuery, pq.name), id)
 
 	if err != nil {
 		return fmt.Errorf("failed to ack: %w", err)
@@ -130,7 +140,7 @@ func (pq *AckQueue) Ack(id int64) error {
 	}
 
 	if rows == 0 {
-		return fmt.Errorf("failed to ack: no rows affected")
+		return fmt.Errorf("failed to ack: no rows affected - possible ack expiration")
 	}
 
 	return nil
@@ -153,9 +163,7 @@ func (pq *AckQueue) ExpireAck(id int64) error {
 
 // Len returns the number of items in the queue.
 func (pq *AckQueue) Len() (int, error) {
-	row := pq.db.QueryRow(fmt.Sprintf(`
-        SELECT COUNT(*) FROM %s WHERE processed_at IS NULL AND (ack_deadline < CURRENT_TIMESTAMP OR ack_deadline IS NULL)
-    `, pq.name))
+	row := pq.db.QueryRow(fmt.Sprintf(ackLenQuery, pq.name))
 	var count int
 	err := row.Scan(&count)
 	return count, err

@@ -3,12 +3,55 @@ package godq
 import (
 	"context"
 	"database/sql"
-	"fmt"
+	"log"
+	"reflect"
 	"time"
 )
 
 type TryDequeuer interface {
 	TryDequeueCtx(ctx context.Context) (Msg, error)
+}
+
+type ErrNoItemsWaiting struct{}
+
+func (e *ErrNoItemsWaiting) Error() string {
+	return "no items waiting"
+}
+
+type ErrDBLocked struct {}
+
+func (e *ErrDBLocked) Error() string {
+	return "database locked"
+}
+
+type ErrContextDone struct {}
+
+func (e *ErrContextDone) Error() string {
+	return "context done"
+}
+
+
+
+// A helper function to handle common dequeue errors.
+func handleDequeueResult(id int64, item []byte, err error) (Msg, error) {
+	if err == sql.ErrNoRows {
+		return Msg{}, &ErrNoItemsWaiting{}
+	}
+
+	if err == context.Canceled {
+		return Msg{}, &ErrContextDone{}
+	}
+
+	if err != nil {
+		log.Println("Error dequeueing item:", err)
+		log.Println("Error type:", reflect.TypeOf(err))
+		return Msg{}, err
+	}
+
+	return Msg{
+		ID:   id,
+		Item: item,
+	}, nil
 }
 
 // dequeueBlocking blocks until an item is available to dequeue, or the context is cancelled.
@@ -17,16 +60,20 @@ func dequeueBlocking(ctx context.Context, dequeuer TryDequeuer, pollInterval tim
 		item, err := dequeuer.TryDequeueCtx(ctx)
 		if err == nil {
 			return item, nil
-		}
-		if err != sql.ErrNoRows {
+		} 
+
+		_, ok := err.(*ErrNoItemsWaiting)
+		if !ok {
 			return Msg{}, err
 		}
 
 		select {
 		case <-ctx.Done():
-			return Msg{}, fmt.Errorf("context done: %w", ctx.Err())
+			return Msg{}, &ErrContextDone{}
+			
 		case <-time.After(pollInterval): // Continue
 		case <-notifyChan: // Continue
+
 		}
 	}
 }

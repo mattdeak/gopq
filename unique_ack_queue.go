@@ -9,6 +9,45 @@ import (
 	"github.com/mattdeak/godq/internal"
 )
 
+const (
+	uniqueAckCreateTableQuery = `
+		CREATE TABLE IF NOT EXISTS %[1]s (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			item BLOB NOT NULL,
+			enqueued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			processed_at TIMESTAMP,
+			ack_deadline TIMESTAMP,
+			retry_count INTEGER DEFAULT 0,
+			UNIQUE(item) ON CONFLICT IGNORE
+		);
+		CREATE INDEX IF NOT EXISTS idx_processed ON %[1]s(processed_at);
+		CREATE INDEX IF NOT EXISTS idx_ack_deadline ON %[1]s(ack_deadline);
+	`
+	uniqueAckEnqueueQuery = `
+		INSERT INTO %s (item) VALUES (?)
+	`
+	uniqueAckTryDequeueQuery = `
+		WITH oldest AS (
+			SELECT id, item
+			FROM %[1]s
+			WHERE ack_deadline IS NULL OR ack_deadline < CURRENT_TIMESTAMP
+			ORDER BY enqueued_at ASC
+			LIMIT 1
+		)
+		UPDATE %[1]s SET ack_deadline = ? WHERE id = (SELECT id FROM oldest)
+		RETURNING id, item
+	`
+	uniqueAckAckQuery = `
+		DELETE FROM %s 
+		WHERE id = ? AND ack_deadline >= CURRENT_TIMESTAMP
+	`
+	uniqueAckLenQuery = `
+		SELECT COUNT(*) FROM %s
+		WHERE processed_at IS NULL
+		AND (ack_deadline IS NULL OR ack_deadline < CURRENT_TIMESTAMP)
+	`
+)
+
 // UniqueAckQueue is a acknowledgeable queue that ensures that each item is only processed once.
 type UniqueAckQueue struct {
 	baseQueue
@@ -23,27 +62,17 @@ func NewUniqueAckQueue(filePath string, opts AckOpts) (*UniqueAckQueue, error) {
 		return nil, fmt.Errorf("failed to create unique ack queue: %w", err)
 	}
 
-	queue, err := setupUniqueAckQueue(db, "unique_ack_queue", defaultPollInterval, opts)
+	tableName := internal.GetUniqueTableName("unique_ack_queue")
+	err = internal.PrepareDB(db, tableName, uniqueAckCreateTableQuery, uniqueAckEnqueueQuery, uniqueAckTryDequeueQuery, uniqueAckAckQuery, uniqueAckLenQuery)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create unique ack queue: %w", err)
 	}
-	return queue, nil
+
+	return setupUniqueAckQueue(db, tableName, defaultPollInterval, opts)
 }
 
 func setupUniqueAckQueue(db *sql.DB, name string, pollInterval time.Duration, opts AckOpts) (*UniqueAckQueue, error) {
-	_, err := db.Exec(fmt.Sprintf(`
-		CREATE TABLE IF NOT EXISTS %s (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			item BLOB NOT NULL,
-			enqueued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			processed_at TIMESTAMP,
-			ack_deadline TIMESTAMP,
-			retry_count INTEGER DEFAULT 0,
-			UNIQUE(item) ON CONFLICT IGNORE
-		);
-		CREATE INDEX IF NOT EXISTS idx_processed ON %s(processed_at);
-		CREATE INDEX IF NOT EXISTS idx_ack_deadline ON %s(ack_deadline);
-	`, name, name, name))
+	_, err := db.Exec(fmt.Sprintf(uniqueAckCreateTableQuery, name, name, name))
 	if err != nil {
 		return nil, err
 	}
@@ -58,9 +87,7 @@ func setupUniqueAckQueue(db *sql.DB, name string, pollInterval time.Duration, op
 
 // Enqueue adds an item to the queue.
 func (uaq *UniqueAckQueue) Enqueue(item []byte) error {
-	_, err := uaq.db.Exec(fmt.Sprintf(`
-		INSERT INTO %s (item) VALUES (?)
-	`, uaq.name), item)
+	_, err := uaq.db.Exec(fmt.Sprintf(uniqueAckEnqueueQuery, uaq.name), item)
 	if err != nil {
 		return err
 	}
@@ -90,37 +117,17 @@ func (uaq *UniqueAckQueue) TryDequeue() (Msg, error) {
 // TryDequeueCtx attempts to dequeue an item without blocking using a context.
 // If no item is available, it returns an empty Msg and an error.
 func (uaq *UniqueAckQueue) TryDequeueCtx(ctx context.Context) (Msg, error) {
-	row := uaq.db.QueryRowContext(ctx, fmt.Sprintf(`
-		WITH oldest AS (
-			SELECT id, item
-			FROM %s
-			WHERE ack_deadline IS NULL OR ack_deadline < CURRENT_TIMESTAMP
-			ORDER BY enqueued_at ASC
-			LIMIT 1
-		)
-		UPDATE %s SET ack_deadline = ? WHERE id = (SELECT id FROM oldest)
-		RETURNING id, item
-	`, uaq.name, uaq.name), time.Now().Add(uaq.opts.AckTimeout))
+	row := uaq.db.QueryRowContext(ctx, fmt.Sprintf(uniqueAckTryDequeueQuery, uaq.name), time.Now().Add(uaq.opts.AckTimeout))
 	var id int64
 	var item []byte
 
 	err := row.Scan(&id, &item)
-	if err != nil {
-		return Msg{}, fmt.Errorf("failed to dequeue: %w", err)
-	}
-
-	return Msg{
-		ID:   id,
-		Item: item,
-	}, nil
+	return handleDequeueResult(id, item, err)
 }
 
 // Ack marks an item as processed and removes it from the queue.
 func (uaq *UniqueAckQueue) Ack(id int64) error {
-	res, err := uaq.db.Exec(fmt.Sprintf(`
-		DELETE FROM %s 
-		WHERE id = ? AND ack_deadline >= CURRENT_TIMESTAMP
-	`, uaq.name), id)
+	res, err := uaq.db.Exec(fmt.Sprintf(uniqueAckAckQuery, uaq.name), id)
 
 	if err != nil {
 		return fmt.Errorf("failed to ack: %w", err)
@@ -155,11 +162,7 @@ func (uaq *UniqueAckQueue) ExpireAck(id int64) error {
 
 // Len returns the number of items available in the queue.
 func (uaq *UniqueAckQueue) Len() (int, error) {
-	row := uaq.db.QueryRow(fmt.Sprintf(`
-		SELECT COUNT(*) FROM %s
-		WHERE processed_at IS NULL
-		AND (ack_deadline IS NULL OR ack_deadline < CURRENT_TIMESTAMP)
-	`, uaq.name))
+	row := uaq.db.QueryRow(fmt.Sprintf(uniqueAckLenQuery, uaq.name))
 	var count int
 	err := row.Scan(&count)
 	return count, err

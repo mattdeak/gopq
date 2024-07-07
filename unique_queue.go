@@ -9,6 +9,34 @@ import (
 	"github.com/mattdeak/godq/internal"
 )
 
+const (
+	uniqueCreateTableQuery = `
+        CREATE TABLE IF NOT EXISTS %s (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item BLOB NOT NULL,
+            enqueued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(item) ON CONFLICT IGNORE
+        );
+    `
+	uniqueEnqueueQuery = `
+        INSERT INTO %s (item) VALUES (?)
+    `
+	uniqueTryDequeueQuery = `
+		WITH oldest AS (
+			SELECT id, item
+			FROM %[1]s
+			ORDER BY enqueued_at ASC
+			LIMIT 1
+		)
+		DELETE FROM %[1]s
+		WHERE id = (SELECT id FROM oldest)
+		RETURNING id, item
+    `
+	uniqueLenQuery = `
+        SELECT COUNT(*) FROM %s
+    `
+)
+
 // UniqueQueue is a queue that ensures that each item is only processed once.
 type UniqueQueue struct {
 	baseQueue
@@ -20,18 +48,17 @@ func NewUniqueQueue(filePath string) (*UniqueQueue, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create unique queue: %w", err)
 	}
-	return setupUniqueQueue(db, "unique_queue", defaultPollInterval)
+
+	tableName := internal.GetUniqueTableName("unique_queue")
+	err = internal.PrepareDB(db, tableName, uniqueCreateTableQuery, uniqueEnqueueQuery, uniqueTryDequeueQuery, uniqueLenQuery)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create unique queue: %w", err)
+	}
+	return setupUniqueQueue(db, tableName, defaultPollInterval)
 }
 
 func setupUniqueQueue(db *sql.DB, name string, pollInterval time.Duration) (*UniqueQueue, error) {
-	_, err := db.Exec(fmt.Sprintf(`
-        CREATE TABLE IF NOT EXISTS %s (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            item BLOB NOT NULL,
-            enqueued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(item) ON CONFLICT IGNORE
-        );
-    `, name))
+	_, err := db.Exec(fmt.Sprintf(uniqueCreateTableQuery, name))
 	if err != nil {
 		return nil, err
 	}
@@ -44,9 +71,7 @@ func setupUniqueQueue(db *sql.DB, name string, pollInterval time.Duration) (*Uni
 
 // Enqueue adds an item to the queue.
 func (pq *UniqueQueue) Enqueue(item []byte) error {
-	_, err := pq.db.Exec(fmt.Sprintf(`
-        INSERT INTO %s (item) VALUES (?)
-    `, pq.name), item)
+	_, err := pq.db.Exec(fmt.Sprintf(uniqueEnqueueQuery, pq.name), item)
 	if err != nil {
 		return err
 	}
@@ -75,34 +100,16 @@ func (pq *UniqueQueue) TryDequeue() (Msg, error) {
 // TryDequeueCtx attempts to dequeue an item without blocking using a context.
 // If no item is available, it returns an empty Msg and an error.
 func (pq *UniqueQueue) TryDequeueCtx(ctx context.Context) (Msg, error) {
-	row := pq.db.QueryRowContext(ctx, fmt.Sprintf(`
-		WITH oldest AS (
-			SELECT id, item
-			FROM %s
-			ORDER BY enqueued_at ASC
-			LIMIT 1
-		)
-		DELETE FROM %s
-		WHERE id = (SELECT id FROM oldest)
-		RETURNING id, item
-    `, pq.name, pq.name))
+	row := pq.db.QueryRowContext(ctx, fmt.Sprintf(uniqueTryDequeueQuery, pq.name))
 	var id int64
 	var item []byte
 	err := row.Scan(&id, &item)
-	if err != nil {
-		return Msg{}, fmt.Errorf("failed to dequeue: %w", err)
-	}
-	return Msg{
-		ID:   id,
-		Item: item,
-	}, nil
+	return handleDequeueResult(id, item, err)
 }
 
 // Len returns the number of items in the queue.
 func (pq *UniqueQueue) Len() (int, error) {
-	row := pq.db.QueryRow(fmt.Sprintf(`
-        SELECT COUNT(*) FROM %s
-    `, pq.name))
+	row := pq.db.QueryRow(fmt.Sprintf(uniqueLenQuery, pq.name))
 	var count int
 	err := row.Scan(&count)
 	return count, err
