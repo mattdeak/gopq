@@ -10,14 +10,12 @@ godq is a lightweight, persistent queue implementation in Go, using SQLite as th
 ## Features
 
 - Persistent storage using SQLite
-- Multiple queue types:
-  - Simple Queue
-  - Acknowledged Queue
-  - Unique Queue
-  - Unique Acknowledged Queue
+- Unique/Non-Unique Queues
+- Acknowledged/Non-Acknowledged Queues
 - Blocking and non-blocking dequeue operations
 - Context support for cancellation and timeouts
 - Thread-safe operations
+- Easy and Composable Dead Letter Queues
 
 ## Installation
 
@@ -67,8 +65,8 @@ func main() {
 
 Here are some examples of how to use different queue types:
 
-### Simple Queue
-
+### Basic Queue
+A simple FIFO queue.
 ```go
 import "github.com/mattdeak/godq"
 
@@ -84,15 +82,17 @@ if err != nil {
     // Handle error
 }
 
-// Dequeue an item
+// Dequeue an item (blocks until a message is available)
 msg, err := queue.Dequeue()
 if err != nil {
     // Handle error
 }
+
 fmt.Println(string(msg.Item))
 ```
 
 ### Acknowledged Queue
+When an item is dequeued from an acknowledged queue, an ack deadline is set internally. If the ack deadline passes without an ack being received, the item becomes available at the front of the queue.
 
 ```go
 import "github.com/mattdeak/godq"
@@ -125,10 +125,12 @@ if err != nil {
 err = queue.Nack(msg.ID)
 if err != nil {
 // Handle error
-}// Acknowledge the item if processing was successful
+}
 ```
 
 ### Unique Queue
+A unique queue ensures that every item in the queue is unique. Once an item is
+successfully dequeued, it can be enqueued again immediately.
 
 ```go
 import "github.com/mattdeak/godq"
@@ -150,6 +152,18 @@ msg2, _ := queue.Dequeue()
 msg3, err := queue.TryDequeue() // This will return an error (queue is empty)
 
 ```
+
+## Dequeue Methods
+* `Dequeue()`: Blocks until an item is available. Uses a background context internally.
+* `DequeueCtx(ctx context.Context)`: Blocks until an item is available or the context is cancelled.
+* `TryDequeue()`: Immediately attempts to dequeue, non-blocking. Returns an error if the queue is empty. Uses a background context internally.
+* `TryDequeueCtx(ctx context.Context)`: Attempts to dequeue immediately. Context
+can be used to interrupt a sqlite operation.
+
+All these methods return a `Msg` struct containing the dequeued item and its ID, along with an error if the operation fails.
+
+For `AckableQueue`, the dequeue methods also update the acknowledgement deadline for the dequeued item.
+
 
 ## Queue Types
 
