@@ -1,4 +1,4 @@
-package godq_test
+package gopq_test
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mattdeak/godq"
+	"github.com/mattdeak/gopq"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -14,7 +14,7 @@ func TestNewUniqueQueue(t *testing.T) {
 	tempFile := tempFilePath(t)
 	defer os.Remove(tempFile)
 
-	q, err := godq.NewUniqueQueue(tempFile)
+	q, err := gopq.NewUniqueQueue(tempFile)
 	if err != nil {
 		t.Fatalf("NewUniqueQueue() error = %v", err)
 	}
@@ -134,11 +134,11 @@ func TestUniqueQueue_Len(t *testing.T) {
 	}
 }
 
-func setupTestUniqueQueue(t *testing.T) *godq.Queue {
+func setupTestUniqueQueue(t *testing.T) *gopq.Queue {
 	tempFile := tempFilePath(t)
 	t.Cleanup(func() { os.Remove(tempFile) })
 
-	q, err := godq.NewUniqueQueue(tempFile)
+	q, err := gopq.NewUniqueQueue(tempFile)
 	if err != nil {
 		t.Fatalf("Failed to create test queue: %v", err)
 	}

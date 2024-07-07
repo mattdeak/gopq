@@ -1,4 +1,4 @@
-package godq_test
+package gopq_test
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mattdeak/godq"
+	"github.com/mattdeak/gopq"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,7 +16,7 @@ func TestNewUniqueAckQueue(t *testing.T) {
 	tempFile := tempFilePath(t)
 	defer os.Remove(tempFile)
 
-	q, err := godq.NewUniqueAckQueue(tempFile, godq.AckOpts{AckTimeout: time.Second})
+	q, err := gopq.NewUniqueAckQueue(tempFile, gopq.AckOpts{AckTimeout: time.Second})
 	if err != nil {
 		t.Fatalf("NewUniqueAckQueue() error = %v", err)
 	}
@@ -169,14 +169,14 @@ func TestUniqueAckQueue_Nack(t *testing.T) {
 		name            string
 		maxRetries      int
 		deadLetterQueue bool
-		operations      func(*testing.T, *godq.AcknowledgeableQueue, *godq.AcknowledgeableQueue)
-		expectedResult  func(*testing.T, *godq.AcknowledgeableQueue, *godq.AcknowledgeableQueue)
+		operations      func(*testing.T, *gopq.AcknowledgeableQueue, *gopq.AcknowledgeableQueue)
+		expectedResult  func(*testing.T, *gopq.AcknowledgeableQueue, *gopq.AcknowledgeableQueue)
 	}{
 		{
 			name:            "No retries, no dead letter queue",
 			maxRetries:      0,
 			deadLetterQueue: false,
-			operations: func(t *testing.T, q, dlq *godq.AcknowledgeableQueue) {
+			operations: func(t *testing.T, q, dlq *gopq.AcknowledgeableQueue) {
 				err := q.Enqueue([]byte("test"))
 				require.NoError(t, err)
 				msg, err := q.TryDequeue()
@@ -186,7 +186,7 @@ func TestUniqueAckQueue_Nack(t *testing.T) {
 				err = q.ExpireAck(msg.ID)
 				require.NoError(t, err)
 			},
-			expectedResult: func(t *testing.T, q, dlq *godq.AcknowledgeableQueue) {
+			expectedResult: func(t *testing.T, q, dlq *gopq.AcknowledgeableQueue) {
 				_, err := q.TryDequeue()
 				assert.Error(t, err) // Item should be removed
 				assert.Equal(t, 0, uniqueQueueLength(t, q))
@@ -196,7 +196,7 @@ func TestUniqueAckQueue_Nack(t *testing.T) {
 			name:            "With retries, no dead letter queue",
 			maxRetries:      2,
 			deadLetterQueue: false,
-			operations: func(t *testing.T, q, dlq *godq.AcknowledgeableQueue) {
+			operations: func(t *testing.T, q, dlq *gopq.AcknowledgeableQueue) {
 				err := q.Enqueue([]byte("test"))
 				require.NoError(t, err)
 				for i := 0; i < 3; i++ {
@@ -208,7 +208,7 @@ func TestUniqueAckQueue_Nack(t *testing.T) {
 					require.NoError(t, err)
 				}
 			},
-			expectedResult: func(t *testing.T, q, dlq *godq.AcknowledgeableQueue) {
+			expectedResult: func(t *testing.T, q, dlq *gopq.AcknowledgeableQueue) {
 				_, err := q.TryDequeue()
 				assert.Error(t, err) // Item should be removed after max retries
 				assert.Equal(t, 0, uniqueQueueLength(t, q))
@@ -218,7 +218,7 @@ func TestUniqueAckQueue_Nack(t *testing.T) {
 			name:            "With retries and dead letter queue",
 			maxRetries:      1,
 			deadLetterQueue: true,
-			operations: func(t *testing.T, q, dlq *godq.AcknowledgeableQueue) {
+			operations: func(t *testing.T, q, dlq *gopq.AcknowledgeableQueue) {
 				err := q.Enqueue([]byte("test"))
 				require.NoError(t, err)
 				for i := 0; i < 2; i++ {
@@ -230,7 +230,7 @@ func TestUniqueAckQueue_Nack(t *testing.T) {
 					require.NoError(t, err)
 				}
 			},
-			expectedResult: func(t *testing.T, q, dlq *godq.AcknowledgeableQueue) {
+			expectedResult: func(t *testing.T, q, dlq *gopq.AcknowledgeableQueue) {
 				assert.Equal(t, 0, uniqueQueueLength(t, q))
 				assert.Equal(t, 1, uniqueQueueLength(t, dlq))
 			},
@@ -239,7 +239,7 @@ func TestUniqueAckQueue_Nack(t *testing.T) {
 			name:            "Infinite retries",
 			maxRetries:      -1,
 			deadLetterQueue: false,
-			operations: func(t *testing.T, q, dlq *godq.AcknowledgeableQueue) {
+			operations: func(t *testing.T, q, dlq *gopq.AcknowledgeableQueue) {
 				err := q.Enqueue([]byte("test"))
 				require.NoError(t, err)
 				for i := 0; i < 10; i++ {
@@ -251,7 +251,7 @@ func TestUniqueAckQueue_Nack(t *testing.T) {
 					require.NoError(t, err)
 				}
 			},
-			expectedResult: func(t *testing.T, q, dlq *godq.AcknowledgeableQueue) {
+			expectedResult: func(t *testing.T, q, dlq *gopq.AcknowledgeableQueue) {
 				assert.Equal(t, 1, uniqueQueueLength(t, q))
 			},
 		},
@@ -259,7 +259,7 @@ func TestUniqueAckQueue_Nack(t *testing.T) {
 			name:            "Nack with expired ack deadline",
 			maxRetries:      1,
 			deadLetterQueue: false,
-			operations: func(t *testing.T, q, dlq *godq.AcknowledgeableQueue) {
+			operations: func(t *testing.T, q, dlq *gopq.AcknowledgeableQueue) {
 				err := q.Enqueue([]byte("test"))
 				require.NoError(t, err)
 				msg, err := q.TryDequeue()
@@ -269,7 +269,7 @@ func TestUniqueAckQueue_Nack(t *testing.T) {
 				err = q.Nack(msg.ID)
 				assert.Error(t, err) // Expect an error for expired ack deadline
 			},
-			expectedResult: func(t *testing.T, q, dlq *godq.AcknowledgeableQueue) {
+			expectedResult: func(t *testing.T, q, dlq *gopq.AcknowledgeableQueue) {
 				// If the ack expires, the item was effectively never dequeued.
 				assert.Equal(t, 1, uniqueQueueLength(t, q))
 			},
@@ -278,13 +278,13 @@ func TestUniqueAckQueue_Nack(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			q := setupTestUniqueAckQueue(t, godq.AckOpts{
+			q := setupTestUniqueAckQueue(t, gopq.AckOpts{
 				AckTimeout:   time.Hour, // long timeout, we expire manually
 				MaxRetries:   tt.maxRetries,
 				RetryBackoff: time.Millisecond, // This doesn't matter as we're using ExpireAck
 			})
 
-			var dlq *godq.AcknowledgeableQueue
+			var dlq *gopq.AcknowledgeableQueue
 			if tt.deadLetterQueue {
 				dlq = setupDefaultTestUniqueAckQueue(t)
 				q.SetDeadLetterQueue(dlq)
@@ -296,25 +296,25 @@ func TestUniqueAckQueue_Nack(t *testing.T) {
 	}
 }
 
-func uniqueQueueLength(t *testing.T, q *godq.AcknowledgeableQueue) int {
+func uniqueQueueLength(t *testing.T, q *gopq.AcknowledgeableQueue) int {
 	length, err := q.Len()
 	require.NoError(t, err)
 	return length
 }
 
-func setupDefaultTestUniqueAckQueue(t *testing.T) *godq.AcknowledgeableQueue {
-	return setupTestUniqueAckQueue(t, godq.AckOpts{
+func setupDefaultTestUniqueAckQueue(t *testing.T) *gopq.AcknowledgeableQueue {
+	return setupTestUniqueAckQueue(t, gopq.AckOpts{
 		AckTimeout:   time.Hour * 999,
 		MaxRetries:   0,
 		RetryBackoff: time.Second,
 	})
 }
 
-func setupTestUniqueAckQueue(t *testing.T, opts godq.AckOpts) *godq.AcknowledgeableQueue {
+func setupTestUniqueAckQueue(t *testing.T, opts gopq.AckOpts) *gopq.AcknowledgeableQueue {
 	tempFile := tempFilePath(t)
 	t.Cleanup(func() { os.Remove(tempFile) })
 
-	q, err := godq.NewUniqueAckQueue(tempFile, opts)
+	q, err := gopq.NewUniqueAckQueue(tempFile, opts)
 	if err != nil {
 		t.Fatalf("Failed to create test queue: %v", err)
 	}

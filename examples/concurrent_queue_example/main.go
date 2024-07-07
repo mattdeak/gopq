@@ -8,12 +8,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mattdeak/godq"
+	"github.com/mattdeak/gopq"
 )
 
 func main() {
 	// Create a new queue in memory
-	queue, err := godq.NewUniqueAckQueue("", godq.AckOpts{
+	queue, err := gopq.NewUniqueAckQueue("", gopq.AckOpts{
 		AckTimeout: 15 * time.Second,
 		MaxRetries: 3,
 	})
@@ -60,7 +60,7 @@ func main() {
 	processAttempts := map[string]int{}
 
 	type result struct {
-		msg     godq.Msg
+		msg     gopq.Msg
 		nack    bool
 		success bool
 	}
@@ -89,7 +89,7 @@ func main() {
 				// should run forever. If you know your producers will stop, you may want to use
 				// TryDequeue instead to avoid blocking.
 				msg, err := queue.DequeueCtx(ctx)
-				if _, ok := err.(*godq.ErrContextDone); ok {
+				if _, ok := err.(*gopq.ErrContextDone); ok {
 					return
 				}
 				if err != nil {

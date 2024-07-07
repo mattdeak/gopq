@@ -1,9 +1,9 @@
-package godq
+package gopq
 
 import (
 	"fmt"
 
-	"github.com/mattdeak/godq/internal"
+	"github.com/mattdeak/gopq/internal"
 )
 
 const (

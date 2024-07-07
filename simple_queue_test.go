@@ -1,4 +1,4 @@
-package godq_test
+package gopq_test
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mattdeak/godq"
+	"github.com/mattdeak/gopq"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -14,7 +14,7 @@ func TestNewSimpleQueue(t *testing.T) {
 	tempFile := tempFilePath(t)
 	defer os.Remove(tempFile)
 
-	q, err := godq.NewSimpleQueue(tempFile)
+	q, err := gopq.NewSimpleQueue(tempFile)
 	if err != nil {
 		t.Fatalf("NewSimpleQueue() error = %v", err)
 	}
@@ -121,11 +121,11 @@ func TestSimpleQueue_Len(t *testing.T) {
 	}
 }
 
-func setupTestQueue(t *testing.T) *godq.Queue {
+func setupTestQueue(t *testing.T) *gopq.Queue {
 	tempFile := tempFilePath(t)
 	t.Cleanup(func() { os.Remove(tempFile) })
 
-	q, err := godq.NewSimpleQueue(tempFile)
+	q, err := gopq.NewSimpleQueue(tempFile)
 	if err != nil {
 		t.Fatalf("Failed to create test queue: %v", err)
 	}

@@ -5,12 +5,12 @@ import (
 	"log"
 	"time"
 
-	"github.com/mattdeak/godq"
+	"github.com/mattdeak/gopq"
 )
 
 func main() {
 	// Create a new acknowledged queue with custom options
-	queue, err := godq.NewAckQueue("", godq.AckOpts{
+	queue, err := gopq.NewAckQueue("", gopq.AckOpts{
 		AckTimeout:   5 * time.Second,
 		MaxRetries:   3,
 		RetryBackoff: 1 * time.Second,

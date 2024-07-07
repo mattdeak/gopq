@@ -1,4 +1,4 @@
-package godq
+package gopq
 
 import (
 	"database/sql"

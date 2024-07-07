@@ -5,12 +5,12 @@ import (
 	"log"
 	"time"
 
-	"github.com/mattdeak/godq"
+	"github.com/mattdeak/gopq"
 )
 
 func main() {
 	// Create main queue
-	mainQueue, err := godq.NewAckQueue("", godq.AckOpts{
+	mainQueue, err := gopq.NewAckQueue("", gopq.AckOpts{
 		AckTimeout: 2 * time.Second,
 		MaxRetries: 2,
 	})
@@ -20,7 +20,7 @@ func main() {
 	defer mainQueue.Close()
 
 	// Create dead letter queue
-	dlq, err := godq.NewSimpleQueue("")
+	dlq, err := gopq.NewSimpleQueue("")
 	if err != nil {
 		log.Fatalf("Failed to create dead letter queue: %v", err)
 	}

@@ -1,11 +1,11 @@
-# godq: Go Disk Queue
+# gopq: Go Disk Queue
 
 A lightweight, sqlite-backed persistent queue implementation in Go.
 
-[![Go](https://github.com/mattdeak/godq/actions/workflows/go.yml/badge.svg)](https://github.com/mattdeak/godq/actions/workflows/go.yml)
-[![GoDoc](https://godoc.org/github.com/mattdeak/godq?status.svg)](https://godoc.org/github.com/mattdeak/godq)
+[![Go](https://github.com/mattdeak/gopq/actions/workflows/go.yml/badge.svg)](https://github.com/mattdeak/gopq/actions/workflows/go.yml)
+[![GoDoc](https://godoc.org/github.com/mattdeak/gopq?status.svg)](https://godoc.org/github.com/mattdeak/gopq)
 
-godq is a lightweight, persistent queue implementation in Go, using SQLite as the underlying storage mechanism. It provides various queue types to suit different use cases, including simple queues, acknowledged queues, and unique item queues.
+gopq is a lightweight, persistent queue implementation in Go, using SQLite as the underlying storage mechanism. It provides various queue types to suit different use cases, including simple queues, acknowledged queues, and unique item queues.
 
 ## Features
 
@@ -19,34 +19,34 @@ godq is a lightweight, persistent queue implementation in Go, using SQLite as th
 
 ## Installation
 
-To use godq in your Go project, run:
+To use gopq in your Go project, run:
 
 ```
-go get github.com/mattdeak/godq
+go get github.com/mattdeak/gopq
 ```
 
 Make sure you have SQLite installed on your system.
 
 ## Getting Started
-Here's a minimal example to get you started with godq:
+Here's a minimal example to get you started with gopq:
 ```go
 package main
 
 import (
     "fmt"
-    "github.com/mattdeak/godq"
+    "github.com/mattdeak/gopq"
 )
 
 func main() {
     // Create a new simple queue
-    queue, err := godq.NewSimpleQueue("myqueue.db")
+    queue, err := gopq.NewSimpleQueue("myqueue.db")
     if err != nil {
         panic(err)
     }
     defer queue.Close()
 
     // Enqueue an item
-    err = queue.Enqueue([]byte("Hello, godq!"))
+    err = queue.Enqueue([]byte("Hello, gopq!"))
     if err != nil {
         panic(err)
     }
@@ -57,7 +57,7 @@ func main() {
         panic(err)
     }
 
-    fmt.Println(string(msg.Item)) // Output: Hello, godq!
+    fmt.Println(string(msg.Item)) // Output: Hello, gopq!
 }
 ```
 
@@ -68,10 +68,10 @@ Here are some examples of how to use different queue types:
 ### Basic Queue
 A simple FIFO queue.
 ```go
-import "github.com/mattdeak/godq"
+import "github.com/mattdeak/gopq"
 
 // Create a new simple queue
-queue, err := godq.NewSimpleQueue("queue.db")
+queue, err := gopq.NewSimpleQueue("queue.db")
 if err != nil {
     // Handle error
 }
@@ -95,9 +95,9 @@ fmt.Println(string(msg.Item))
 When an item is dequeued from an acknowledged queue, an ack deadline is set internally. If the ack deadline passes without an ack being received, the item becomes available at the front of the queue.
 
 ```go
-import "github.com/mattdeak/godq"
+import "github.com/mattdeak/gopq"
 // Create a new acknowledged queue with custom options
-queue, err := godq.NewAckQueue("ack_queue.db", godq.AckOpts{
+queue, err := gopq.NewAckQueue("ack_queue.db", gopq.AckOpts{
 AckTimeout: 30 time.Second,
 MaxRetries: 3,
 RetryBackoff: 5 time.Second,
@@ -133,10 +133,10 @@ A unique queue ensures that every item in the queue is unique. Once an item is
 successfully dequeued, it can be enqueued again immediately.
 
 ```go
-import "github.com/mattdeak/godq"
+import "github.com/mattdeak/gopq"
 
 // Create a new unique queue
-queue, err := godq.NewUniqueQueue("unique_queue.db")
+queue, err := gopq.NewUniqueQueue("unique_queue.db")
 if err != nil {
     // Handle error
 }
@@ -174,13 +174,22 @@ For `AckableQueue`, the dequeue methods also update the acknowledgement deadline
 
 
 ## Advanced Features
+### In-Memory Queue
+If you don't require persistence, you can use an in-memory queue
+by calling the constructor with an empty string.
+
+```go
+q := gopq.NewSimpleQueue("") // Now uses an in-memory database
+```
+This can be useful for testing.
+
 ### Dead Letter Queue
 For AckQueue and UniqueAckQueue, you can set up a dead letter queue to handle messages that exceed the maximum retry count automatically:
 ```go
-mainQueue, := godq.NewAckQueue("main_queue.db", godq.AckOpts{
+mainQueue, := gopq.NewAckQueue("main_queue.db", gopq.AckOpts{
 MaxRetries: 3,
 })
-deadLetterQueue, := godq.NewSimpleQueue("dead_letter.db") // Can be any Enqueuer (supports Enqueue([]byte))
+deadLetterQueue, := gopq.NewSimpleQueue("dead_letter.db") // Can be any Enqueuer (supports Enqueue([]byte))
 mainQueue.SetDeadLetterQueue(deadLetterQueue)
 ```
 
@@ -212,7 +221,7 @@ See the examples directory for more.
 AckQueue and UniqueAckQueue support configurable retry mechanisms:
 
 ```go
-queue, := godq.NewAckQueue("queue.db", godq.AckOpts{
+queue, := gopq.NewAckQueue("queue.db", gopq.AckOpts{
 AckTimeout: 1 time.Minute, // Any message that takes longer than 1 minute to ack will be requeued.
 MaxRetries: 5 // 0 for no retries, -1 for infinite retries
 RetryBackoff: 10 time.Second, // Sets a new ack deadline to be the max of (current deadline, now + retry backoff)
@@ -221,7 +230,7 @@ RetryBackoff: 10 time.Second, // Sets a new ack deadline to be the max of (curre
 
 ## Examples
 
-There are several, more detailed examples demonstrating various features of godq. These examples are located in the `examples` directory at the root of the project. To run an example, navigate to its directory and use `go run main.go`. For instance:
+There are several, more detailed examples demonstrating various features of gopq. These examples are located in the `examples` directory at the root of the project. To run an example, navigate to its directory and use `go run main.go`. For instance:
 
 Available examples:
 - Simple Queue Usage: `examples/simple_queue_example`
@@ -231,7 +240,7 @@ Available examples:
 - Multiple Tiered Dead Letter Queues: `examples/tiered_dlq_example`
 - Concurrent Queue Usage: `examples/concurrent_queue_example`
 
-Each example demonstrates different features and use cases of godq. We encourage you to explore these examples to better understand how to use the library in your projects.
+Each example demonstrates different features and use cases of gopq. We encourage you to explore these examples to better understand how to use the library in your projects.
 
 ## Contributing
 Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change. Ensure to update tests as appropriate.
