@@ -167,9 +167,7 @@ func TestUniqueAckQueue_Len(t *testing.T) {
 func TestUniqueAckQueue_Nack(t *testing.T) {
 	tests := []struct {
 		name            string
-		ackTimeout      time.Duration
 		maxRetries      int
-		retryBackoff    time.Duration
 		deadLetterQueue bool
 		operations      func(*testing.T, *godq.UniqueAckQueue, *godq.UniqueAckQueue)
 		expectedResult  func(*testing.T, *godq.UniqueAckQueue, *godq.UniqueAckQueue)
@@ -177,7 +175,6 @@ func TestUniqueAckQueue_Nack(t *testing.T) {
 		{
 			name:            "No retries, no dead letter queue",
 			maxRetries:      0,
-			retryBackoff:    time.Second,
 			deadLetterQueue: false,
 			operations: func(t *testing.T, q, dlq *godq.UniqueAckQueue) {
 				err := q.Enqueue([]byte("test"))
@@ -185,6 +182,8 @@ func TestUniqueAckQueue_Nack(t *testing.T) {
 				msg, err := q.TryDequeue()
 				require.NoError(t, err)
 				err = q.Nack(msg.ID)
+				require.NoError(t, err)
+				err = q.ExpireAck(msg.ID)
 				require.NoError(t, err)
 			},
 			expectedResult: func(t *testing.T, q, dlq *godq.UniqueAckQueue) {
@@ -196,7 +195,6 @@ func TestUniqueAckQueue_Nack(t *testing.T) {
 		{
 			name:            "With retries, no dead letter queue",
 			maxRetries:      2,
-			retryBackoff:    time.Millisecond,
 			deadLetterQueue: false,
 			operations: func(t *testing.T, q, dlq *godq.UniqueAckQueue) {
 				err := q.Enqueue([]byte("test"))
@@ -206,7 +204,8 @@ func TestUniqueAckQueue_Nack(t *testing.T) {
 					require.NoError(t, err)
 					err = q.Nack(msg.ID)
 					require.NoError(t, err)
-					time.Sleep(2 * time.Millisecond) // Wait for backoff
+					err = q.ExpireAck(msg.ID)
+					require.NoError(t, err)
 				}
 			},
 			expectedResult: func(t *testing.T, q, dlq *godq.UniqueAckQueue) {
@@ -218,7 +217,6 @@ func TestUniqueAckQueue_Nack(t *testing.T) {
 		{
 			name:            "With retries and dead letter queue",
 			maxRetries:      1,
-			retryBackoff:    time.Millisecond,
 			deadLetterQueue: true,
 			operations: func(t *testing.T, q, dlq *godq.UniqueAckQueue) {
 				err := q.Enqueue([]byte("test"))
@@ -228,7 +226,8 @@ func TestUniqueAckQueue_Nack(t *testing.T) {
 					require.NoError(t, err)
 					err = q.Nack(msg.ID)
 					require.NoError(t, err)
-					time.Sleep(2 * time.Millisecond) // Wait for backoff
+					err = q.ExpireAck(msg.ID)
+					require.NoError(t, err)
 				}
 			},
 			expectedResult: func(t *testing.T, q, dlq *godq.UniqueAckQueue) {
@@ -239,7 +238,6 @@ func TestUniqueAckQueue_Nack(t *testing.T) {
 		{
 			name:            "Infinite retries",
 			maxRetries:      -1,
-			retryBackoff:    time.Millisecond,
 			deadLetterQueue: false,
 			operations: func(t *testing.T, q, dlq *godq.UniqueAckQueue) {
 				err := q.Enqueue([]byte("test"))
@@ -249,7 +247,8 @@ func TestUniqueAckQueue_Nack(t *testing.T) {
 					require.NoError(t, err)
 					err = q.Nack(msg.ID)
 					require.NoError(t, err)
-					time.Sleep(2 * time.Millisecond) // Wait for backoff
+					err = q.ExpireAck(msg.ID)
+					require.NoError(t, err)
 				}
 			},
 			expectedResult: func(t *testing.T, q, dlq *godq.UniqueAckQueue) {
@@ -259,7 +258,6 @@ func TestUniqueAckQueue_Nack(t *testing.T) {
 		{
 			name:            "Nack with expired ack deadline",
 			maxRetries:      1,
-			retryBackoff:    0,
 			deadLetterQueue: false,
 			operations: func(t *testing.T, q, dlq *godq.UniqueAckQueue) {
 				err := q.Enqueue([]byte("test"))
@@ -281,9 +279,9 @@ func TestUniqueAckQueue_Nack(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			q := setupTestUniqueAckQueue(t, godq.AckOpts{
-				AckTimeout:   time.Hour, // long timeout, we expire manually if needed
+				AckTimeout:   time.Hour, // long timeout, we expire manually
 				MaxRetries:   tt.maxRetries,
-				RetryBackoff: tt.retryBackoff,
+				RetryBackoff: time.Millisecond, // This doesn't matter as we're using ExpireAck
 			})
 
 			var dlq *godq.UniqueAckQueue
