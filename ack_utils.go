@@ -3,6 +3,7 @@ package godq
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -11,7 +12,11 @@ func nackImpl(db *sql.DB, tableName string, id int64, opts AckOpts, deadLetterQu
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			log.Fatalf("failed to rollback transaction: %v", err)
+		}
+	}()
 
 	var retryCount int
 	var currentAckDeadline time.Time
