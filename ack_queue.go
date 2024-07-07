@@ -12,10 +12,8 @@ import (
 // AckQueue is a queue that provides the ability to acknowledge messages.
 type AckQueue struct {
 	baseQueue
-	ackTimeout time.Duration
-	maxRetries int
-	deadLetterQueue Queue // Any queue
-	retryBackoff time.Duration
+	opts AckOpts
+	deadLetterQueue Enqueuer
 }
 
 // NewAckQueue creates a new ack queue.
@@ -52,10 +50,7 @@ func setupAckQueue(db *sql.DB, name string, pollInterval time.Duration, opts Ack
 	notifyChan := make(chan struct{}, 1)
     return &AckQueue{
         baseQueue: baseQueue{db: db, name: name, pollInterval: pollInterval, notifyChan: notifyChan},
-		ackTimeout: opts.AckTimeout,
-		maxRetries: opts.MaxRetries,
-		deadLetterQueue: opts.DeadLetterQueue,
-		retryBackoff: opts.RetryBackoff,
+		opts: opts,
     }, nil
 }
 
@@ -104,7 +99,7 @@ func (pq *AckQueue) TryDequeueCtx(ctx context.Context) (Msg, error) {
 		SET ack_deadline = ?
 		WHERE id = (SELECT id FROM oldest)
 		RETURNING id, item
-    `, pq.name, pq.name), time.Now().Add(pq.ackTimeout))
+    `, pq.name, pq.name), time.Now().Add(pq.opts.AckTimeout))
     var id int64
     var item []byte
 
@@ -142,61 +137,19 @@ func (pq *AckQueue) Ack(id int64) error {
 	return nil
 }
 
-// Nack marks an item as not processed and re-queues it.
+// If present, failed messages will be added to the dead letter queue.
+// Otherwise, they will be discarded.
+func (pq *AckQueue) SetDeadLetterQueue(queue Enqueuer) {
+	pq.deadLetterQueue = queue
+}
+
+// Nack marks an item as not processed and handles based on AckOpts
 func (pq *AckQueue) Nack(id int64) error {
-	tx, err := pq.db.BeginTx(context.Background(), nil)
-	if err != nil {
-		return fmt.Errorf("failed to nack: %w", err)
-	}
-	defer tx.Rollback()
+	return nackImpl(pq.db, pq.name, id, pq.opts, pq.deadLetterQueue)
+}
 
-	var retryCount int
-	err = tx.QueryRow(fmt.Sprintf(`
-		SELECT COUNT(*) FROM %s WHERE id = ?
-	`, pq.name), id).Scan(&retryCount)
-	if err != nil {
-		return fmt.Errorf("failed to nack: %w", err)
-	}
-
-	if retryCount >= pq.maxRetries {
-		// Add to deadletter if it exists
-		if pq.deadLetterQueue != nil {
-			var item []byte
-			err = tx.QueryRow(fmt.Sprintf(`
-				SELECT item FROM %s WHERE id = ?
-			`, pq.name), id).Scan(&item)
-			if err != nil {
-				return fmt.Errorf("failed to nack: %w", err)
-			}
-			err = pq.deadLetterQueue.Enqueue(item)
-			if err != nil {
-				return fmt.Errorf("failed to nack: %w", err)
-			}
-		}
-
-		// Delete from main queue
-		_, err = tx.Exec(fmt.Sprintf(`
-			DELETE FROM %s WHERE id = ?
-		`, pq.name), id)
-		if err != nil {
-			return fmt.Errorf("failed to nack: %w", err)
-		}
-	} else {
-		// Increment retry count
-		_, err = tx.Exec(fmt.Sprintf(`
-			UPDATE %s SET ack_deadline = ?, retry_count = retry_count + 1 WHERE id = ?
-		`, pq.name), time.Now().Add(pq.retryBackoff), id)
-		if err != nil {
-			return fmt.Errorf("failed to nack: %w", err)
-		}
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return fmt.Errorf("failed to nack: %w", err)
-	}
-
-	return nil
+func (pq *AckQueue) ExpireAck(id int64) error {
+	return expireAckDeadline(pq.db, pq.name, id)
 }
 
 // Len returns the number of items in the queue.

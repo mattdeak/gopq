@@ -13,37 +13,40 @@ const (
     defaultPollInterval = 100 * time.Millisecond
 )
 
+// Enqueuer provides methods for enqueueing items to the queue.
+type Enqueuer interface {
+	// Enqueue adds an item to the queue.
+	// It returns an error if the operation fails.
+	Enqueue(item []byte) error
+}
+
+// Dequeuer provides methods for dequeueing items from the queue.
+type Dequeuer interface {
+	// Dequeue removes and returns the next item from the queue.
+	// It blocks if the queue is empty until an item becomes available.
+	// Returns an error if the operation fails.
+	Dequeue() (Msg, error)
+    // DequeueCtx removes and returns the next item from the queue.
+    // It blocks if the queue is empty until an item becomes available or the context is cancelled.
+    // Returns an error if the operation fails or the context is cancelled.
+	DequeueCtx(ctx context.Context) (Msg, error)
+    // TryDequeue attempts to remove and return the next item from the queue.
+    // It returns immediately, even if the queue is empty.
+    // Returns an error if the operation fails or the queue is empty.
+	TryDequeue() (Msg, error)
+    // TryDequeueCtx attempts to remove and return the next item from the queue.
+    // It returns immediately if an item is available, or waits until the context is cancelled.
+    // Returns an error if the operation fails, the queue is empty, or the context is cancelled.
+	TryDequeueCtx(ctx context.Context) (Msg, error)
+}
+
 
 // Queue represents a durable queue interface.
 // It provides methods for enqueueing and dequeueing items,
 // with both blocking and non-blocking operations.
 type Queue interface {
-    // Enqueue adds an item to the queue.
-    // It returns an error if the operation fails.
-    Enqueue(item []byte) error
-
-    // Dequeue removes and returns the next item from the queue.
-    // It blocks if the queue is empty until an item becomes available.
-    // Returns an error if the operation fails.
-    Dequeue() (Msg, error)
-
-    // DequeueCtx removes and returns the next item from the queue.
-    // It blocks if the queue is empty until an item becomes available or the context is cancelled.
-    // Returns an error if the operation fails or the context is cancelled.
-    DequeueCtx(ctx context.Context) (Msg, error)
-
-    // TryDequeue attempts to remove and return the next item from the queue.
-    // It returns immediately, even if the queue is empty.
-    // Returns an error if the operation fails or the queue is empty.
-    TryDequeue() (Msg, error)
-
-    // TryDequeueCtx attempts to remove and return the next item from the queue.
-    // It returns immediately if an item is available, or waits until the context is cancelled.
-    // Returns an error if the operation fails, the queue is empty, or the context is cancelled.
-    TryDequeueCtx(ctx context.Context) (Msg, error)
-
-    // Close closes the queue and releases any resources.
-    // It returns an error if the operation fails.
+    Enqueuer
+    Dequeuer
     Close() error
 }
 

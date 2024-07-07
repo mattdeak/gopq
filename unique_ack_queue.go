@@ -12,7 +12,8 @@ import (
 // UniqueAckQueue is a acknowledgeable queue that ensures that each item is only processed once.
 type UniqueAckQueue struct {
 	baseQueue
-	ackTimeout time.Duration
+	opts AckOpts
+	deadLetterQueue Enqueuer
 }
 
 // NewUniqueAckQueue creates a new unique ack queue.
@@ -37,6 +38,7 @@ func setupUniqueAckQueue(db *sql.DB, name string, pollInterval time.Duration, op
 			enqueued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			processed_at TIMESTAMP,
 			ack_deadline TIMESTAMP,
+			retry_count INTEGER DEFAULT 0,
 			UNIQUE(item) ON CONFLICT IGNORE
 		);
 		CREATE INDEX IF NOT EXISTS idx_processed ON %s(processed_at);
@@ -49,7 +51,8 @@ func setupUniqueAckQueue(db *sql.DB, name string, pollInterval time.Duration, op
 	notifyChan := make(chan struct{}, 1)
 	return &UniqueAckQueue{
 		baseQueue:  baseQueue{db: db, name: name, pollInterval: pollInterval, notifyChan: notifyChan},
-		ackTimeout: opts.AckTimeout,
+		opts: opts,
+		deadLetterQueue: nil,
 	}, nil
 }
 
@@ -98,7 +101,7 @@ func (uaq *UniqueAckQueue) TryDequeueCtx(ctx context.Context) (Msg, error) {
 		)
 		UPDATE %s SET ack_deadline = ? WHERE id = (SELECT id FROM oldest)
 		RETURNING id, item
-	`, uaq.name, uaq.name), time.Now().Add(uaq.ackTimeout))
+	`, uaq.name, uaq.name), time.Now().Add(uaq.opts.AckTimeout))
 	var id int64
 	var item []byte
 
@@ -136,32 +139,29 @@ func (uaq *UniqueAckQueue) Ack(id int64) error {
 	return nil
 }
 
-// Nack marks an item as not processed and removes it from the queue.
-func (uaq *UniqueAckQueue) Nack(id int64) error {
-	res, err := uaq.db.Exec(fmt.Sprintf(`
-		UPDATE %s SET ack_deadline = NULL WHERE id = ?
-	`, uaq.name), id)
 
-	if err != nil {
-		return fmt.Errorf("failed to nack: %w", err)
-	}
-
-	rows, err := res.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to nack: %w", err)
-	}
-
-	if rows == 0 {
-		return fmt.Errorf("failed to nack: no rows affected")
-	}
-
-	return nil
+// SetDeadLetterQueue sets the dead letter queue. Only requires the queuer to be an Enqueuer.
+// If present, failed messages will be added to the dead letter queue.
+func (uaq *UniqueAckQueue) SetDeadLetterQueue(dlq Enqueuer) {
+	uaq.deadLetterQueue = dlq
 }
 
-// Len returns the number of items in the queue.
+// Nack marks an item as not processed and handles based on AckOpts
+func (uaq *UniqueAckQueue) Nack(id int64) error {
+	return nackImpl(uaq.db, uaq.name, id, uaq.opts, uaq.deadLetterQueue)
+}
+
+
+func (uaq *UniqueAckQueue) ExpireAck(id int64) error {
+	return expireAckDeadline(uaq.db, uaq.name, id)
+}
+
+// Len returns the number of items available in the queue.
 func (uaq *UniqueAckQueue) Len() (int, error) {
 	row := uaq.db.QueryRow(fmt.Sprintf(`
 		SELECT COUNT(*) FROM %s
+		WHERE processed_at IS NULL
+		AND (ack_deadline IS NULL OR ack_deadline < CURRENT_TIMESTAMP)
 	`, uaq.name))
 	var count int
 	err := row.Scan(&count)
