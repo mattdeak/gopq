@@ -13,9 +13,10 @@ const (
 	uniqueCreateTableQuery = `
         CREATE TABLE IF NOT EXISTS %s (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_hash TEXT NOT NULL,
             item BLOB NOT NULL,
             enqueued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(item) ON CONFLICT IGNORE
+            UNIQUE(item_hash) ON CONFLICT IGNORE
         );
     `
 	uniqueEnqueueQuery = `
