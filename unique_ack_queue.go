@@ -45,7 +45,6 @@ const (
 	`
 )
 
-
 // NewUniqueAckQueue creates a new unique ack queue.
 func NewUniqueAckQueue(filePath string, opts AckOpts) (*AcknowledgeableQueue, error) {
 	db, err := internal.InitializeDB(filePath)
@@ -65,13 +64,12 @@ func NewUniqueAckQueue(filePath string, opts AckOpts) (*AcknowledgeableQueue, er
 		return nil, fmt.Errorf("failed to create unique ack queue: %w", err)
 	}
 
-	notifyChan := make(chan struct{}, 1)
 	return &AcknowledgeableQueue{
 		Queue: Queue{
 			db:           db,
 			name:         tableName,
 			pollInterval: defaultPollInterval,
-			notifyChan:   notifyChan,
+			notifyChan:   internal.MakeNotifyChan(),
 			queries: baseQueries{
 				createTable: formattedCreateTableQuery,
 				enqueue:     formattedEnqueueQuery,
@@ -83,6 +81,5 @@ func NewUniqueAckQueue(filePath string, opts AckOpts) (*AcknowledgeableQueue, er
 		ackQueries: ackQueries{
 			ack: formattedAckQuery,
 		},
-
 	}, nil
 }

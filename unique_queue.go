@@ -48,19 +48,16 @@ func NewUniqueQueue(filePath string) (*Queue, error) {
 	formattedTryDequeueQuery := fmt.Sprintf(uniqueTryDequeueQuery, tableName)
 	formattedLenQuery := fmt.Sprintf(uniqueLenQuery, tableName)
 
-
-
 	err = internal.PrepareDB(db, formattedCreateTableQuery, formattedEnqueueQuery, formattedTryDequeueQuery, formattedLenQuery)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create unique queue: %w", err)
 	}
 
-	notifyChan := make(chan struct{}, 1)
 	return &Queue{
 		db:           db,
 		name:         tableName,
 		pollInterval: defaultPollInterval,
-		notifyChan:   notifyChan,
+		notifyChan:   internal.MakeNotifyChan(),
 		queries: baseQueries{
 			createTable: formattedCreateTableQuery,
 			enqueue:     formattedEnqueueQuery,

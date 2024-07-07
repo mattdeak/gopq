@@ -80,20 +80,20 @@ type Queue struct {
 	name         string
 	pollInterval time.Duration
 	notifyChan   chan struct{}
-	queries baseQueries
+	queries      baseQueries
 }
 
 type AcknowledgeableQueue struct {
 	Queue
-	ackOpts AckOpts
+	ackOpts    AckOpts
 	ackQueries ackQueries
 }
 
 type baseQueries struct {
 	createTable string
-	enqueue string
-	tryDequeue string
-	len string
+	enqueue     string
+	tryDequeue  string
+	len         string
 }
 
 type ackQueries struct {
@@ -103,7 +103,6 @@ type ackQueries struct {
 func (q *Queue) Close() error {
 	return q.db.Close()
 }
-
 
 func (q *Queue) Enqueue(item []byte) error {
 	_, err := q.db.Exec(q.queries.enqueue, item)
@@ -115,7 +114,6 @@ func (q *Queue) Enqueue(item []byte) error {
 	}()
 	return nil
 }
-
 
 // Dequeue blocks until an item is available. Uses background context.
 func (q *Queue) Dequeue() (Msg, error) {
@@ -139,7 +137,6 @@ func (q *Queue) TryDequeueCtx(ctx context.Context) (Msg, error) {
 	err := row.Scan(&id, &item)
 	return handleDequeueResult(id, item, err)
 }
-
 
 // Len returns the number of items in the queue.
 func (q *Queue) Len() (int, error) {
@@ -170,9 +167,9 @@ func (q *AcknowledgeableQueue) TryDequeue() (Msg, error) {
 	return q.TryDequeueCtx(context.Background())
 }
 
-func (q* AcknowledgeableQueue) TryDequeueCtx(ctx context.Context) (Msg, error) {
-	ack_deadline := time.Now().Add(q.ackOpts.AckTimeout)
-	row := q.db.QueryRowContext(ctx, q.queries.tryDequeue, ack_deadline)
+func (q *AcknowledgeableQueue) TryDequeueCtx(ctx context.Context) (Msg, error) {
+	newAckDeadline := time.Now().Add(q.ackOpts.AckTimeout)
+	row := q.db.QueryRowContext(ctx, q.queries.tryDequeue, newAckDeadline)
 	var id int64
 	var item []byte
 	err := row.Scan(&id, &item)

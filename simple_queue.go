@@ -36,6 +36,7 @@ const (
         SELECT COUNT(*) FROM %s WHERE processed_at IS NULL
     `
 )
+
 // NewSimpleQueue creates a new simple queue.
 // If filePath is empty, the queue will be created in memory.
 func NewSimpleQueue(filePath string) (*Queue, error) {
@@ -55,13 +56,12 @@ func NewSimpleQueue(filePath string) (*Queue, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare database: %w", err)
 	}
-	notifyChan := make(chan struct{}, 1)
 
 	return &Queue{
 		db:           db,
 		name:         tableName,
 		pollInterval: defaultPollInterval,
-		notifyChan:   notifyChan,
+		notifyChan:   internal.MakeNotifyChan(),
 		queries: baseQueries{
 			createTable: formattedCreateTableQuery,
 			enqueue:     formattedEnqueueQuery,
@@ -70,4 +70,3 @@ func NewSimpleQueue(filePath string) (*Queue, error) {
 		},
 	}, nil
 }
-

@@ -45,7 +45,6 @@ const (
     `
 )
 
-
 // NewAckQueue creates a new ack queue.
 // If filePath is empty, the queue will be created in memory.
 func NewAckQueue(filePath string, opts AckOpts) (*AcknowledgeableQueue, error) {
@@ -62,7 +61,6 @@ func NewAckQueue(filePath string, opts AckOpts) (*AcknowledgeableQueue, error) {
 	formattedAckQuery := fmt.Sprintf(ackAckQuery, tableName)
 	formattedLenQuery := fmt.Sprintf(ackLenQuery, tableName)
 
-
 	err = internal.PrepareDB(db, formattedCreateTableQuery, formattedEnqueueQuery, formattedTryDequeueQuery, formattedAckQuery, formattedLenQuery)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ack queue: %w", err)
@@ -70,10 +68,10 @@ func NewAckQueue(filePath string, opts AckOpts) (*AcknowledgeableQueue, error) {
 
 	return &AcknowledgeableQueue{
 		Queue: Queue{
-			db: db,
-			name: tableName,
+			db:           db,
+			name:         tableName,
 			pollInterval: defaultPollInterval,
-			notifyChan: make(chan struct{}),
+			notifyChan:   internal.MakeNotifyChan(),
 			queries: baseQueries{
 				createTable: formattedCreateTableQuery,
 				enqueue:     formattedEnqueueQuery,
