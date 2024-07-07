@@ -18,19 +18,17 @@ func (e *ErrNoItemsWaiting) Error() string {
 	return "no items waiting"
 }
 
-type ErrDBLocked struct {}
+type ErrDBLocked struct{}
 
 func (e *ErrDBLocked) Error() string {
 	return "database locked"
 }
 
-type ErrContextDone struct {}
+type ErrContextDone struct{}
 
 func (e *ErrContextDone) Error() string {
 	return "context done"
 }
-
-
 
 // A helper function to handle common dequeue errors.
 func handleDequeueResult(id int64, item []byte, err error) (Msg, error) {
@@ -60,7 +58,7 @@ func dequeueBlocking(ctx context.Context, dequeuer TryDequeuer, pollInterval tim
 		item, err := dequeuer.TryDequeueCtx(ctx)
 		if err == nil {
 			return item, nil
-		} 
+		}
 
 		_, ok := err.(*ErrNoItemsWaiting)
 		if !ok {
@@ -70,7 +68,7 @@ func dequeueBlocking(ctx context.Context, dequeuer TryDequeuer, pollInterval tim
 		select {
 		case <-ctx.Done():
 			return Msg{}, &ErrContextDone{}
-			
+
 		case <-time.After(pollInterval): // Continue
 		case <-notifyChan: // Continue
 

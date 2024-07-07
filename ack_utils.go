@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	selectItemDetailsQuery = "SELECT retry_count, ack_deadline FROM %s WHERE id = ?"
-	selectItemForDLQQuery  = "SELECT item FROM %s WHERE id = ?"
-	deleteItemQuery        = "DELETE FROM %s WHERE id = ?"
+	selectItemDetailsQuery  = "SELECT retry_count, ack_deadline FROM %s WHERE id = ?"
+	selectItemForDLQQuery   = "SELECT item FROM %s WHERE id = ?"
+	deleteItemQuery         = "DELETE FROM %s WHERE id = ?"
 	updateItemForRetryQuery = `
 		UPDATE %s 
 		SET ack_deadline = ?, retry_count = retry_count + 1
@@ -60,7 +60,7 @@ func nackImpl(db *sql.DB, tableName string, id int64, opts AckOpts, deadLetterQu
 			return fmt.Errorf("failed to delete item: %w", err)
 		}
 	} else {
-		 // Use the maximum of retryBackoff and ackTimeout
+		// Use the maximum of retryBackoff and ackTimeout
 		newDeadline := time.Now().Add(max(opts.RetryBackoff, opts.AckTimeout))
 		_, err = tx.Exec(fmt.Sprintf(updateItemForRetryQuery, tableName), newDeadline, id)
 		if err != nil {

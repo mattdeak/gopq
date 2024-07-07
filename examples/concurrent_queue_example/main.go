@@ -54,16 +54,14 @@ func main() {
 		cancel()
 	}()
 
-
-
 	// Some simple utilities to collect stats
 	processedCount := 0
 	ackFailures := 0
 	processAttempts := map[string]int{}
 
 	type result struct {
-		msg godq.Msg
-		nack bool
+		msg     godq.Msg
+		nack    bool
 		success bool
 	}
 
@@ -81,7 +79,6 @@ func main() {
 			}
 		}
 	}()
-
 
 	for i := 0; i < numConsumers; i++ {
 		wg.Add(1)
@@ -118,7 +115,6 @@ func main() {
 		}(i)
 	}
 
-
 	// Wait for all goroutines to finish
 	wg.Wait()
 
@@ -131,4 +127,3 @@ func main() {
 	fmt.Printf("Total ack failures: %d\n", ackFailures)
 	fmt.Printf("Total process attempts: %d\n", len(processAttempts))
 }
-

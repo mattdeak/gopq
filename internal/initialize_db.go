@@ -29,7 +29,6 @@ func InitializeDB(fileName string) (*sql.DB, error) {
 
 }
 
-
 func PrepareDB(db *sql.DB, tableName string, createTableQuery string, queries ...string) error {
 	_, err := db.Exec(fmt.Sprintf(createTableQuery, tableName))
 	if err != nil {
