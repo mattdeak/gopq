@@ -1,4 +1,4 @@
-# gopq: Go Disk Queue
+# gopq: Go Persistent-Queue
 
 A lightweight, sqlite-backed persistent queue implementation in Go.
 
