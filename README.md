@@ -29,6 +29,40 @@ go get github.com/mattdeak/godq
 
 Make sure you have SQLite installed on your system.
 
+## Getting Started
+Here's a minimal example to get you started with godq:
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/mattdeak/godq"
+)
+
+func main() {
+    // Create a new simple queue
+    queue, err := godq.NewSimpleQueue("myqueue.db")
+    if err != nil {
+        panic(err)
+    }
+    defer queue.Close()
+
+    // Enqueue an item
+    err = queue.Enqueue([]byte("Hello, godq!"))
+    if err != nil {
+        panic(err)
+    }
+
+    // Dequeue an item
+    msg, err := queue.Dequeue()
+    if err != nil {
+        panic(err)
+    }
+
+    fmt.Println(string(msg.Item)) // Output: Hello, godq!
+}
+```
+
 ## Usage
 
 Here are some examples of how to use different queue types:
@@ -119,14 +153,15 @@ msg3, err := queue.TryDequeue() // This will return an error (queue is empty)
 
 ## Queue Types
 
-1. **SimpleQueue**: Basic FIFO queue with no additional features.
-2. **AckQueue**: Queue with acknowledgment support. Items must be acknowledged after processing, or they will be requeued after a timeout.
-3. **UniqueQueue**: Queue that only allows unique items. Duplicate enqueue attempts are silently ignored.
-4. **UniqueAckQueue**: Combination of UniqueQueue and AckQueue. Ensures unique items with acknowledgment support.
+1. **SimpleQueue**: Basic FIFO queue with no additional features. Ideal for simple task queues or message passing where order matters but acknowledgment isn't necessary.
+2. **AckQueue**: Queue with acknowledgment support. Items must be acknowledged after processing, or they will be requeued after a timeout. Suitable for ensuring task completion in distributed systems or when processing reliability is crucial.
+3. **UniqueQueue**: Queue that only allows unique items. Duplicate enqueue attempts are silently ignored. Useful for de-duplication scenarios or when you need to ensure only one instance of a task is queued.
+4. **UniqueAckQueue**: Combination of UniqueQueue and AckQueue. Ensures unique items with acknowledgment support. Ideal for scenarios requiring both de-duplication and reliable processing.
+
 
 ## Advanced Features
 ### Dead Letter Queue
-For AckQueue and UniqueAckQueue, you can set up a dead letter queue to handle messages that exceed the maximum retry count:
+For AckQueue and UniqueAckQueue, you can set up a dead letter queue to handle messages that exceed the maximum retry count automatically:
 ```go
 mainQueue, := godq.NewAckQueue("main_queue.db", godq.AckOpts{
 MaxRetries: 3,
@@ -145,8 +180,10 @@ func (l *LogEnqueuer) Enqueue(item []byte) error {
     log.Println(string(item))
     return nil
 }
+```
 
-...
+And elsewhere:
+```go
 
 queue.SetDeadLetterQueue(LogEnqueuer {})
 
@@ -183,14 +220,14 @@ Available examples:
 Each example demonstrates different features and use cases of godq. We encourage you to explore these examples to better understand how to use the library in your projects.
 
 ## Contributing
+Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change. Ensure to update tests as appropriate.
 
-Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
-
 This project is licensed under the MIT License.
 
 
 ### Future Work
-- More Queue Configurability
+- More Queue Configurability (LIFO, Priority Queues, etc.)
+- Batch Enqueue/Dequeue operations
 - Various Efficiency Improvements

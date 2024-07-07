@@ -134,7 +134,7 @@ func TestUniqueQueue_Len(t *testing.T) {
 	}
 }
 
-func setupTestUniqueQueue(t *testing.T) *godq.UniqueQueue {
+func setupTestUniqueQueue(t *testing.T) *godq.Queue {
 	tempFile := tempFilePath(t)
 	t.Cleanup(func() { os.Remove(tempFile) })
 

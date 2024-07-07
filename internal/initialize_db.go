@@ -29,14 +29,14 @@ func InitializeDB(fileName string) (*sql.DB, error) {
 
 }
 
-func PrepareDB(db *sql.DB, tableName string, createTableQuery string, queries ...string) error {
-	_, err := db.Exec(fmt.Sprintf(createTableQuery, tableName))
+func PrepareDB(db *sql.DB, createTableQuery string, queries ...string) error {
+	_, err := db.Exec(createTableQuery)
 	if err != nil {
 		return fmt.Errorf("failed to create table: %w", err)
 	}
 
 	for _, query := range queries {
-		_, err := db.Prepare(fmt.Sprintf(query, tableName))
+		_, err := db.Prepare(query)
 		if err != nil {
 			return fmt.Errorf("failed to prepare query: %w", err)
 		}
