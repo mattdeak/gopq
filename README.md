@@ -183,36 +183,44 @@ q := gopq.NewSimpleQueue("") // Now uses an in-memory database
 ```
 This can be useful for testing.
 
-### Dead Letter Queue
-For AckQueue and UniqueAckQueue, you can set up a dead letter queue to handle messages that exceed the maximum retry count automatically:
+### Dead Letter Queues and Failure Callbacks
+
+GoPQ now supports dead letter queues through a more flexible callback system. Instead of directly specifying a dead letter queue, you can register failure callbacks that are called when a message fails to acknowledge after all retries have been exhausted.
+
+To set up a dead letter queue:
+
+1. Create an `AcknowledgeableQueue` for your main queue.
+2. Create another queue to serve as your dead letter queue.
+3. Use the `RegisterDeadLetterQueue` method to set up the dead letter functionality.
+
+Example:
+
 ```go
-mainQueue, := gopq.NewAckQueue("main_queue.db", gopq.AckOpts{
-MaxRetries: 3,
-})
-deadLetterQueue, := gopq.NewSimpleQueue("dead_letter.db") // Can be any Enqueuer (supports Enqueue([]byte))
-mainQueue.SetDeadLetterQueue(deadLetterQueue)
+mainQueue := AckQueue(...)
+deadLetterQueue := SimpleQueue(...)
+mainQueue.RegisterDeadLetterQueue(deadLetterQueue)
 ```
 
-Your dead letter queues can be any queue type or anything that supports the Enqueuer interface.
-For example, you could make a simple logging dead letter queue.
-
-```go
-type LogEnqueuer struct {}
-
-func (l *LogEnqueuer) Enqueue(item []byte) error {
-    log.Println(string(item))
-    return nil
-}
-```
-
-And elsewhere:
-```go
-
-queue.SetDeadLetterQueue(LogEnqueuer {})
-
-```
+Your dead letter queues can be any queue type or anything that supports the Enqueuer interface. If you want, you can have multiple queues with different settings.
 
 Since all queues can be used as dead letter queues, you could, if you wanted too, put dead letter queues on your dead letter queues.
+
+This is a shorthand for registering a failure callback that enqueues the failed message to the dead letter queue.
+
+### Custom Failure Callbacks
+
+For more complex scenarios, you can register custom failure callbacks:
+
+
+```go
+
+mainQueue.RegisterOnFailureCallback(func(msg Msg) error {
+// Custom logic for handling failed messages
+log.Printf("Message failed: %v", msg)
+return nil
+})
+
+```
 See the examples directory for more.
 
 

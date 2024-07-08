@@ -3,8 +3,7 @@ package gopq
 import (
 	"context"
 	"database/sql"
-	"log"
-	"reflect"
+	"errors"
 	"time"
 )
 
@@ -41,8 +40,6 @@ func handleDequeueResult(id int64, item []byte, err error) (Msg, error) {
 	}
 
 	if err != nil {
-		log.Println("Error dequeueing item:", err)
-		log.Println("Error type:", reflect.TypeOf(err))
 		return Msg{}, err
 	}
 
@@ -72,6 +69,46 @@ func dequeueBlocking(ctx context.Context, dequeuer TryDequeuer, pollInterval tim
 		case <-time.After(pollInterval): // Continue
 		case <-notifyChan: // Continue
 
+		}
+	}
+}
+
+type tryEnqueuer interface {
+	TryEnqueueCtx(ctx context.Context, item []byte) error
+}
+
+func handleEnqueueResult(err error) error {
+	if err == sql.ErrNoRows {
+		return &ErrNoItemsWaiting{}
+	}
+
+	if err == context.Canceled {
+		return &ErrContextDone{}
+	}
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func enqueueBlocking(ctx context.Context, enqueuer tryEnqueuer, item []byte, pollInterval time.Duration) error {
+	for {
+		err := enqueuer.TryEnqueueCtx(ctx, item)
+		if err == nil {
+			return nil
+		}
+
+		if !errors.Is(err, &ErrDBLocked{}) {
+			return err
+		}
+
+		select {
+		case <-ctx.Done():
+			return &ErrContextDone{}
+		case <-time.After(pollInterval):
+			// Continue to next attempt
 		}
 	}
 }

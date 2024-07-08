@@ -9,8 +9,6 @@ const (
 	InfiniteRetries = -1
 )
 
-type BehaviourOnFailure int
-
 type AckOpts struct {
 	AckTimeout      time.Duration
 	MaxRetries      int
@@ -22,14 +20,16 @@ type AckOpts struct {
 }
 
 
-func (opts *AckOpts) RegisterFailureCallback(fn func(msg Msg) error) {
-	opts.FailureCallbacks = append(opts.FailureCallbacks, fn)
+// RegisterOnFailureCallback adds a callback to the queue that is called when
+// a message fails to acknowledge.
+func (q *AcknowledgeableQueue) RegisterOnFailureCallback(fn func(msg Msg) error) {
+	q.FailureCallbacks = append(q.FailureCallbacks, fn)
 }
 
 // RegisterDeadLetterQueue sets the dead letter queue for this AcknowledgeableQueue.
-// This is shorthand for RegisterFailureCallback -> Enqueue.
-func (opts *AckOpts) RegisterDeadLetterQueue(dlq Enqueuer) {
-	opts.RegisterFailureCallback(func(msg Msg) error {
+// This is shorthand for RegisterFailureCallback -> dlq.Enqueue.
+func (q *AcknowledgeableQueue) RegisterDeadLetterQueue(dlq Enqueuer) {
+	q.RegisterOnFailureCallback(func(msg Msg) error {
 		return dlq.Enqueue(msg.Item)
 	})
 }

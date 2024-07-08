@@ -11,7 +11,7 @@ import (
 func main() {
 	// Create main queue
 	mainQueue, err := gopq.NewAckQueue("", gopq.AckOpts{
-		AckTimeout: 2 * time.Second,
+		AckTimeout: 2 * time.Hour, // We'll manually expire in this example to make it run faster
 		MaxRetries: 2,
 	})
 	if err != nil {
@@ -45,7 +45,7 @@ func main() {
 		fmt.Printf("Attempt %d: Dequeued: %s\n", i+1, string(msg.Item))
 
 		// Simulate processing failure
-		time.Sleep(1 * time.Second)
+		time.Sleep(500 * time.Millisecond)
 		err = mainQueue.Nack(msg.ID)
 		if err != nil {
 			log.Printf("Failed to nack item: %v", err)
@@ -54,7 +54,9 @@ func main() {
 		}
 
 		// Wait for item to be available again
-		time.Sleep(2 * time.Second)
+		// time.Sleep(1 * time.Second)
+		// Simulate with ExpireAck
+		mainQueue.ExpireAck(msg.ID)
 	}
 
 	// Check main queue (should be empty)

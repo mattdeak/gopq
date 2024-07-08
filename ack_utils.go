@@ -50,10 +50,13 @@ func nackImpl(db *sql.DB, tableName string, id int64, opts AckOpts) error {
 		}
 		if len(opts.FailureCallbacks) > 0 {
 			for _, fn := range opts.FailureCallbacks {
-				fn(Msg{
+				err := fn(Msg{
 					ID:   id,
 					Item: item,
 				})
+				if err != nil {
+					return fmt.Errorf("failed to execute failure callback: %w", err)
+				}
 			}
 		}
 	} else {

@@ -18,6 +18,9 @@ type Enqueuer interface {
 	// Enqueue adds an item to the queue.
 	// It returns an error if the operation fails.
 	Enqueue(item []byte) error
+	EnqueueCtx(ctx context.Context, item []byte) error
+	TryEnqueue(item []byte) error
+	TryEnqueueCtx(ctx context.Context, item []byte) error
 }
 
 // Dequeuer provides methods for dequeueing items from the queue.
@@ -111,7 +114,20 @@ func (q *Queue) Close() error {
 // Enqueue adds an item to the queue.
 // It returns an error if the operation fails.
 func (q *Queue) Enqueue(item []byte) error {
-	_, err := q.db.Exec(q.queries.enqueue, item)
+	return q.EnqueueCtx(context.Background(), item)
+}
+
+func (q *Queue) EnqueueCtx(ctx context.Context, item []byte) error {
+	return enqueueBlocking(ctx, q, item, defaultPollInterval)
+}
+
+
+func (q *Queue) TryEnqueue(item []byte) error {
+	return q.TryEnqueueCtx(context.Background(), item)
+}
+
+func (q *Queue) TryEnqueueCtx(ctx context.Context, item []byte) error {
+	_, err := q.db.ExecContext(ctx, q.queries.enqueue, item)
 	if err != nil {
 		return err
 	}

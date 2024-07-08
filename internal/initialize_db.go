@@ -21,8 +21,7 @@ func InitializeDB(fileName string) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	// not sure if this is the best way to do this
-	// but it does stop lock contention
+
 	db.SetMaxOpenConns(1)
 
 	return db, nil
