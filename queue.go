@@ -129,7 +129,7 @@ func (q *Queue) TryEnqueue(item []byte) error {
 func (q *Queue) TryEnqueueCtx(ctx context.Context, item []byte) error {
 	_, err := q.db.ExecContext(ctx, q.queries.enqueue, item)
 	if err != nil {
-		return err
+		return handleEnqueueResult(err)
 	}
 
 	// Send a notification to the channel to wake up the dequeueing goroutine.

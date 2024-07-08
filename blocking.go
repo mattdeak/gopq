@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -20,7 +21,7 @@ func (e *ErrNoItemsWaiting) Error() string {
 type ErrDBLocked struct{}
 
 func (e *ErrDBLocked) Error() string {
-	return "database locked"
+	return "database table is locked"
 }
 
 type ErrContextDone struct{}
@@ -80,6 +81,10 @@ type tryEnqueuer interface {
 func handleEnqueueResult(err error) error {
 	if err == sql.ErrNoRows {
 		return &ErrNoItemsWaiting{}
+	}
+
+	if strings.Contains(err.Error(), "database table is locked") {
+		return &ErrDBLocked{}
 	}
 
 	if err == context.Canceled {

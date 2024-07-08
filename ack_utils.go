@@ -42,35 +42,48 @@ func nackImpl(db *sql.DB, tableName string, id int64, opts AckOpts) error {
 		return fmt.Errorf("ack deadline has expired, cannot nack")
 	}
 
+	// Check if we have reached the maximum number of retries
 	if retryCount >= opts.MaxRetries && opts.MaxRetries != InfiniteRetries {
-		var item []byte
-		err = tx.QueryRow(fmt.Sprintf(deleteItemQuery, tableName), id).Scan(&item)
-		if err != nil {
-			return fmt.Errorf("failed to delete item for on failure: %w", err)
-		}
-		if len(opts.FailureCallbacks) > 0 {
-			for _, fn := range opts.FailureCallbacks {
-				err := fn(Msg{
-					ID:   id,
-					Item: item,
-				})
-				if err != nil {
-					return fmt.Errorf("failed to execute failure callback: %w", err)
-				}
-			}
-		}
-	} else {
-		// Use the maximum of retryBackoff and ackTimeout
-		newDeadline := time.Now().Add(max(opts.RetryBackoff, opts.AckTimeout)).Unix()
-		_, err = tx.Exec(fmt.Sprintf(updateItemForRetryQuery, tableName), newDeadline, id)
-		if err != nil {
-			return fmt.Errorf("failed to update item for retry: %w", err)
-		}
+		return handleTooManyRetries(tx, tableName, id, opts)
+	}
+
+	// Use the maximum of retryBackoff and ackTimeout
+	newDeadline := time.Now().Add(max(opts.RetryBackoff, opts.AckTimeout)).Unix()
+	_, err = tx.Exec(fmt.Sprintf(updateItemForRetryQuery, tableName), newDeadline, id)
+	if err != nil {
+		return fmt.Errorf("failed to update item for retry: %w", err)
 	}
 
 	err = tx.Commit()
 	if err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+func handleTooManyRetries(tx *sql.Tx, tableName string, id int64, opts AckOpts) error {
+	var item []byte
+	err := tx.QueryRow(fmt.Sprintf(deleteItemQuery, tableName), id).Scan(&item)
+	if err != nil {
+		return fmt.Errorf("failed to delete item for on failure: %w", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	if len(opts.FailureCallbacks) > 0 {
+		for _, fn := range opts.FailureCallbacks {
+			err := fn(Msg{
+				ID:   id,
+				Item: item,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to execute failure callback: %w", err)
+			}
+		}
 	}
 
 	return nil
