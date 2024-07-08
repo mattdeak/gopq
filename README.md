@@ -211,8 +211,8 @@ To set up a dead letter queue:
 Example:
 
 ```go
-mainQueue := AckQueue(...)
-deadLetterQueue := SimpleQueue(...)
+mainQueue := NewAckQueue(...)
+deadLetterQueue := NewSimpleQueue(...)
 mainQueue.RegisterDeadLetterQueue(deadLetterQueue)
 ```
 
