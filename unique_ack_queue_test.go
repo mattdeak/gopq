@@ -2,6 +2,7 @@ package gopq_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -57,6 +58,10 @@ func TestUniqueAckQueue_Enqueue(t *testing.T) {
 
 func TestUniqueAckQueue_TryDequeue(t *testing.T) {
 	q := setupDefaultTestUniqueAckQueue(t)
+	// q, err := gopq.NewUniqueAckQueue("test2.db", gopq.AckOpts{AckTimeout: time.Hour, MaxRetries: 0, RetryBackoff: time.Second})
+	// if err != nil {
+	// 	t.Fatalf("NewUniqueAckQueue() error = %v", err)
+	// }
 
 	// Enqueue an item
 	err := q.Enqueue([]byte("test item"))
@@ -135,33 +140,104 @@ func TestUniqueAckQueue_Ack(t *testing.T) {
 	}
 }
 
-func TestUniqueAckQueue_Len(t *testing.T) {
+func TestUniqueAckQueue_Len_EmptyQueue(t *testing.T) {
+	q := setupDefaultTestUniqueAckQueue(t)
+	assertLen(t, q, 0)
+}
+
+func TestUniqueAckQueue_Len_SingleAndMultipleItems(t *testing.T) {
 	q := setupDefaultTestUniqueAckQueue(t)
 
+	require.NoError(t, q.Enqueue([]byte("item1")))
+	assertLen(t, q, 1)
+
+	require.NoError(t, q.Enqueue([]byte("item2")))
+	require.NoError(t, q.Enqueue([]byte("item3")))
+	assertLen(t, q, 3)
+}
+
+func TestUniqueAckQueue_Len_DuplicateItems(t *testing.T) {
+	q := setupDefaultTestUniqueAckQueue(t)
+
+	require.NoError(t, q.Enqueue([]byte("item1")))
+	require.NoError(t, q.Enqueue([]byte("item2")))
+	require.NoError(t, q.Enqueue([]byte("item1"))) // Duplicate
+	assertLen(t, q, 2)
+}
+
+func TestUniqueAckQueue_Len_AfterDequeueAndAck(t *testing.T) {
+	q := setupDefaultTestUniqueAckQueue(t)
+	// q, err := gopq.NewUniqueAckQueue("test.db", gopq.AckOpts{AckTimeout: time.Hour, MaxRetries: 0, RetryBackoff: time.Second})
+	// if err != nil {
+	// 	t.Fatalf("NewUniqueAckQueue() error = %v", err)
+	// }
+
+
+	require.NoError(t, q.Enqueue([]byte("item1")))
+	require.NoError(t, q.Enqueue([]byte("item2")))
+	assertLen(t, q, 2)
+
+	msg, err := q.TryDequeue()
+	require.NoError(t, err)
+	assertLen(t, q, 1) // Should be 1 as item is 'in progress' and cannot be dequeued
+
+	require.NoError(t, q.Ack(msg.ID))
+	assertLen(t, q, 1) // Should be 1 after ack
+}
+
+func TestUniqueAckQueue_Len_ExpiredItem(t *testing.T) {
+	q := setupTestUniqueAckQueue(t, gopq.AckOpts{AckTimeout: time.Second})
+
+	require.NoError(t, q.Enqueue([]byte("item1")))
+	msg, err := q.TryDequeue()
+	require.NoError(t, err)
+
+	q.ExpireAck(msg.ID)
+	assertLen(t, q, 1) // Expired item should be counted
+}
+
+func TestUniqueAckQueue_Len_AfterNack(t *testing.T) {
+	q := setupDefaultTestUniqueAckQueue(t)
+
+	require.NoError(t, q.Enqueue([]byte("item1")))
+	msg, err := q.TryDequeue()
+	require.NoError(t, err)
+
+	require.NoError(t, q.Nack(msg.ID))
+	assertLen(t, q, 0) // Item is still out, unless acked
+}
+
+func TestUniqueAckQueue_Len_AfterMaxRetries(t *testing.T) {
+	q := setupTestUniqueAckQueue(t, gopq.AckOpts{MaxRetries: 1, RetryBackoff: time.Millisecond})
+
+	require.NoError(t, q.Enqueue([]byte("item1")))
+	
+	// First attempt
+	msg, err := q.TryDequeue()
+	require.NoError(t, err)
+	require.NoError(t, q.Nack(msg.ID))
+	assertLen(t, q, 0) // Item is still out, unless acked
+
+	// Second attempt (exceeds max retries)
+	require.NoError(t, q.Nack(msg.ID))
+	assertLen(t, q, 1) // Item should be requeued after max retries
+}
+
+func TestUniqueAckQueue_Len_ManyItems(t *testing.T) {
+	q := setupDefaultTestUniqueAckQueue(t)
+
+	for i := 0; i < 100; i++ {
+		require.NoError(t, q.Enqueue([]byte(fmt.Sprintf("item-%d", i))))
+	}
+	assertLen(t, q, 100)
+}
+
+// Helper function to assert queue length
+func assertLen(t *testing.T, q *gopq.AcknowledgeableQueue, expected int) {
+	t.Helper()
 	count, err := q.Len()
-	if err != nil {
-		t.Fatalf("Len() error = %v", err)
-	}
-	if count != 0 {
-		t.Errorf("Expected empty queue, got length %d", count)
-	}
-
-	err = q.Enqueue([]byte("item1"))
-	if err != nil {
-		t.Fatalf("Enqueue() error = %v", err)
-	}
-	err = q.Enqueue([]byte("item2"))
-	if err != nil {
-		t.Fatalf("Enqueue() error = %v", err)
-	}
-
-	count, err = q.Len()
-	if err != nil {
-		t.Fatalf("Len() error = %v", err)
-	}
-	if count != 2 {
-		t.Errorf("Expected queue length 2, got %d", count)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, expected, count, "Unexpected queue length")
 }
 
 func TestUniqueAckQueue_Nack(t *testing.T) {
@@ -287,7 +363,7 @@ func TestUniqueAckQueue_Nack(t *testing.T) {
 			var dlq *gopq.AcknowledgeableQueue
 			if tt.deadLetterQueue {
 				dlq = setupDefaultTestUniqueAckQueue(t)
-				q.SetDeadLetterQueue(dlq)
+				q.RegisterDeadLetterQueue(dlq)
 			}
 
 			tt.operations(t, q, dlq)

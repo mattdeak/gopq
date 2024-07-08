@@ -279,7 +279,7 @@ func TestAckQueue_Nack(t *testing.T) {
 			var dlq *gopq.AcknowledgeableQueue
 			if tt.deadLetterQueue {
 				dlq = setupDefaultTestAckQueue(t)
-				q.SetDeadLetterQueue(dlq)
+				q.RegisterDeadLetterQueue(dlq)
 			}
 
 			tt.operations(t, q, dlq)
