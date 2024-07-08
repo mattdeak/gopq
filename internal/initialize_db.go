@@ -21,12 +21,10 @@ func InitializeDB(fileName string) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-
 	db.SetMaxOpenConns(1)
 	return db, nil
 
 }
-
 
 func PrepareDB(db *sql.DB, createTableQuery string, queries ...string) error {
 	_, err := db.Exec(createTableQuery)

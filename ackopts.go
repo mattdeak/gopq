@@ -10,15 +10,14 @@ const (
 )
 
 type AckOpts struct {
-	AckTimeout      time.Duration
-	MaxRetries      int
-	RetryBackoff      time.Duration
+	AckTimeout   time.Duration
+	MaxRetries   int
+	RetryBackoff time.Duration
 
 	// Has a default behaviour of dropping the message
-	BehaviourOnFailure func (msg Msg) error
-	FailureCallbacks []func (msg Msg) error
+	BehaviourOnFailure func(msg Msg) error
+	FailureCallbacks   []func(msg Msg) error
 }
-
 
 // RegisterOnFailureCallback adds a callback to the queue that is called when
 // a message fails to acknowledge.

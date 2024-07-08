@@ -24,7 +24,6 @@ func (e *ErrDBLocked) Error() string {
 	return "database table is locked"
 }
 
-
 // A helper function to handle common dequeue errors.
 func handleDequeueResult(id int64, item []byte, err error) (Msg, error) {
 	if err == sql.ErrNoRows {

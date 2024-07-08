@@ -172,7 +172,6 @@ func TestUniqueAckQueue_Len_AfterDequeueAndAck(t *testing.T) {
 	// 	t.Fatalf("NewUniqueAckQueue() error = %v", err)
 	// }
 
-
 	require.NoError(t, q.Enqueue([]byte("item1")))
 	require.NoError(t, q.Enqueue([]byte("item2")))
 	assertLen(t, q, 2)
@@ -211,7 +210,7 @@ func TestUniqueAckQueue_Len_AfterMaxRetries(t *testing.T) {
 	q := setupTestUniqueAckQueue(t, gopq.AckOpts{MaxRetries: 1, RetryBackoff: time.Millisecond})
 
 	require.NoError(t, q.Enqueue([]byte("item1")))
-	
+
 	// First attempt
 	msg, err := q.TryDequeue()
 	require.NoError(t, err)

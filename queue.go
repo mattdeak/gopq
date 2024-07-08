@@ -90,7 +90,7 @@ type Queue struct {
 
 type AcknowledgeableQueue struct {
 	Queue
-	AckOpts    
+	AckOpts
 	ackQueries ackQueries
 }
 
@@ -120,7 +120,6 @@ func (q *Queue) Enqueue(item []byte) error {
 func (q *Queue) EnqueueCtx(ctx context.Context, item []byte) error {
 	return enqueueBlocking(ctx, q, item, defaultPollInterval)
 }
-
 
 func (q *Queue) TryEnqueue(item []byte) error {
 	return q.TryEnqueueCtx(context.Background(), item)
@@ -179,7 +178,6 @@ func (q *AcknowledgeableQueue) Len() (int, error) {
 	return count, err
 }
 
-
 // Ack acknowledges that an item has been successfully processed.
 // It takes the ID of the message to acknowledge and returns an error if the operation fails.
 func (q *AcknowledgeableQueue) Ack(id int64) error {
@@ -232,7 +230,6 @@ func (q *AcknowledgeableQueue) Nack(id int64) error {
 func (q *AcknowledgeableQueue) ExpireAck(id int64) error {
 	return expireAckDeadline(q.db, q.name, id)
 }
-
 
 // SetBehaviourOnFailure sets the behaviour on failure for the queue.
 // This occurs if a message receives more Nacks than the max retries.
