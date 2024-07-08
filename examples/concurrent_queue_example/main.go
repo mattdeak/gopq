@@ -85,16 +85,12 @@ func main() {
 		go func(id int) {
 			defer wg.Done()
 			for {
-				// This will block until an item is available. We're assuming the producers
+				// This will block until an item is available. We are assuming the producers
 				// should run forever. If you know your producers will stop, you may want to use
 				// TryDequeue instead to avoid blocking.
 				msg, err := queue.DequeueCtx(ctx)
-				if _, ok := err.(*gopq.ErrContextDone); ok {
-					return
-				}
 				if err != nil {
-					log.Printf("Consumer %d failed to dequeue: %v", id, err)
-					continue
+					return
 				}
 				fmt.Printf("Consumer %d dequeued: %s\n", id, string(msg.Item))
 

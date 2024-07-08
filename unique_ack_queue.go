@@ -48,7 +48,7 @@ func NewUniqueAckQueue(filePath string, opts AckOpts) (*AcknowledgeableQueue, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to create unique ack queue: %w", err)
 	}
-	tableName := internal.GetUniqueTableName("unique_ack_queue")
+	tableName := internal.DetermineTableName("unique_ack_queue", filePath)
 
 	formattedCreateTableQuery := fmt.Sprintf(uniqueAckCreateTableQuery, tableName)
 	formattedEnqueueQuery := fmt.Sprintf(uniqueAckEnqueueQuery, tableName)

@@ -24,11 +24,6 @@ func (e *ErrDBLocked) Error() string {
 	return "database table is locked"
 }
 
-type ErrContextDone struct{}
-
-func (e *ErrContextDone) Error() string {
-	return "context done"
-}
 
 // A helper function to handle common dequeue errors.
 func handleDequeueResult(id int64, item []byte, err error) (Msg, error) {
@@ -36,10 +31,7 @@ func handleDequeueResult(id int64, item []byte, err error) (Msg, error) {
 		return Msg{}, &ErrNoItemsWaiting{}
 	}
 
-	if err == context.Canceled {
-		return Msg{}, &ErrContextDone{}
-	}
-
+	// On error on cancelled context
 	if err != nil {
 		return Msg{}, err
 	}
@@ -65,7 +57,7 @@ func dequeueBlocking(ctx context.Context, dequeuer TryDequeuer, pollInterval tim
 
 		select {
 		case <-ctx.Done():
-			return Msg{}, &ErrContextDone{}
+			return Msg{}, context.Canceled
 
 		case <-time.After(pollInterval): // Continue
 		case <-notifyChan: // Continue
@@ -85,10 +77,6 @@ func handleEnqueueResult(err error) error {
 
 	if strings.Contains(err.Error(), "database table is locked") {
 		return &ErrDBLocked{}
-	}
-
-	if err == context.Canceled {
-		return &ErrContextDone{}
 	}
 
 	if err != nil {
@@ -111,7 +99,7 @@ func enqueueBlocking(ctx context.Context, enqueuer tryEnqueuer, item []byte, pol
 
 		select {
 		case <-ctx.Done():
-			return &ErrContextDone{}
+			return context.Canceled
 		case <-time.After(pollInterval):
 			// Continue to next attempt
 		}

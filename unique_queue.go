@@ -41,7 +41,7 @@ func NewUniqueQueue(filePath string) (*Queue, error) {
 		return nil, fmt.Errorf("failed to create unique queue: %w", err)
 	}
 
-	tableName := internal.GetUniqueTableName("unique_queue")
+	tableName := internal.DetermineTableName("unique_queue", filePath)
 
 	formattedCreateTableQuery := fmt.Sprintf(uniqueCreateTableQuery, tableName)
 	formattedEnqueueQuery := fmt.Sprintf(uniqueEnqueueQuery, tableName)

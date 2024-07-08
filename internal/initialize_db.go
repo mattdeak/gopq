@@ -3,16 +3,16 @@ package internal
 import (
 	"database/sql"
 	"fmt"
-	"log/slog"
+	"log"
 )
 
 func InitializeDB(fileName string) (*sql.DB, error) {
 	var dbPath string
 	if fileName == "" {
-		slog.Info("Using in-memory database")
+		log.Println("Using in-memory database")
 		dbPath = "file::memory:?cache=shared"
 	} else {
-		slog.Info("Using SQLite database", "path", fileName)
+		log.Println("Using SQLite database", "path", fileName)
 		dbPath = fmt.Sprintf("file:%s?_journal_mode=WAL", fileName)
 	}
 
@@ -23,10 +23,10 @@ func InitializeDB(fileName string) (*sql.DB, error) {
 
 
 	db.SetMaxOpenConns(1)
-
 	return db, nil
 
 }
+
 
 func PrepareDB(db *sql.DB, createTableQuery string, queries ...string) error {
 	_, err := db.Exec(createTableQuery)

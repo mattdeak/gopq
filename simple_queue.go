@@ -45,7 +45,7 @@ func NewSimpleQueue(filePath string) (*Queue, error) {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	tableName := internal.GetUniqueTableName("simple_queue")
+	tableName := internal.DetermineTableName("simple_queue", filePath)
 
 	formattedCreateTableQuery := fmt.Sprintf(simpleCreateTableQuery, tableName)
 	formattedEnqueueQuery := fmt.Sprintf(simpleEnqueueQuery, tableName)

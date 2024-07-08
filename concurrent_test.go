@@ -1,12 +1,12 @@
-//go:build long
-// +build long
-
 package gopq_test
 
 import (
 	"context"
 	"fmt"
+	"os"
+	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,7 +17,7 @@ import (
 
 func TestConcurrentOperations(t *testing.T) {
 	t.Log("starting TestConcurrentOperations")
-	q, err := gopq.NewUniqueAckQueue("test.db", gopq.AckOpts{
+	q, err := gopq.NewUniqueAckQueue("", gopq.AckOpts{
 		AckTimeout: 5 * time.Second,
 		MaxRetries: 3,
 	})
@@ -67,7 +67,7 @@ func TestConcurrentOperations(t *testing.T) {
 				default:
 					msg, err := q.DequeueCtx(ctx)
 					if err != nil {
-						if _, ok := err.(*gopq.ErrContextDone); ok {
+						if err == context.Canceled {
 							t.Logf("Consumer %d context done, consumed %d items", id, itemsConsumed)
 							return
 						}
@@ -122,7 +122,7 @@ func TestConcurrentOperations(t *testing.T) {
 	t.Logf("Final queue length: %d", length)
 }
 
-func BenchmarkConcurrentOperations(b *testing.B) {
+func BenchmarkConcurrentOperationsInMemory(b *testing.B) {
 	q, err := gopq.NewUniqueAckQueue("", gopq.AckOpts{
 		AckTimeout: 5 * time.Second,
 		MaxRetries: 3,
@@ -130,46 +130,116 @@ func BenchmarkConcurrentOperations(b *testing.B) {
 	require.NoError(b, err)
 	defer q.Close()
 
-	numProducers := 5
-	numConsumers := 3
+	numProducers := runtime.GOMAXPROCS(0) / 2
+	numConsumers := runtime.GOMAXPROCS(0) / 2
+	itemsPerProducer := 1000
 
 	b.ResetTimer()
+	benchmarkConcurrentOperations(b, q, numProducers, numConsumers, itemsPerProducer)
+}
 
-	for i := 0; i < b.N; i++ {
-		var wg sync.WaitGroup
-		ctx, cancel := context.WithCancel(context.Background())
+func BenchmarkConcurrentOperationsOnDisk(b *testing.B) {
+    q, err := gopq.NewUniqueAckQueue("test.db", gopq.AckOpts{
+        AckTimeout: 5 * time.Second,
+        MaxRetries: 3,
+    })
+    require.NoError(b, err)
+    defer q.Close()
+	defer os.Remove("test.db")
 
-		// Start producers
-		for j := 0; j < numProducers; j++ {
-			wg.Add(1)
-			go func(id int) {
-				defer wg.Done()
-				item := fmt.Sprintf("Producer %d - Item %d", id, i)
-				err := q.Enqueue([]byte(item))
-				if err != nil {
-					b.Error(err)
-				}
-			}(j)
-		}
+    // Set up the benchmark parameters
+    numProducers := runtime.GOMAXPROCS(0) / 2
+    numConsumers := runtime.GOMAXPROCS(0) / 2
+    itemsPerProducer := 1000 // Increased from 5 to 1000 for a more substantial workload
 
-		// Start consumers
-		for j := 0; j < numConsumers; j++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				msg, err := q.DequeueCtx(ctx)
-				if err != nil {
-					return
-				}
-				time.Sleep(time.Millisecond) // Simulate processing time
-				err = q.Ack(msg.ID)
-				if err != nil {
-					b.Error(err)
-				}
-			}()
-		}
+    b.ResetTimer()
 
-		wg.Wait()
-		cancel()
-	}
+    // Run the actual benchmark
+    benchmarkConcurrentOperations(b, q, numProducers, numConsumers, itemsPerProducer)
+
+}
+
+func benchmarkConcurrentOperations(b *testing.B, q *gopq.AcknowledgeableQueue, numProducers, numConsumers, itemsPerProducer int) {
+    b.RunParallel(func(pb *testing.PB) {
+        for pb.Next() {
+            var wg sync.WaitGroup
+            ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+            defer cancel()
+
+            producedCount := int64(0)
+            consumedCount := int64(0)
+
+            // Start producers
+            for j := 0; j < numProducers; j++ {
+                wg.Add(1)
+                go func(id int) {
+                    defer wg.Done()
+                    for k := 0; k < itemsPerProducer; k++ {
+                        select {
+                        case <-ctx.Done():
+                            return
+                        default:
+                            item := fmt.Sprintf("Producer %d - Item %d", id, k)
+                            err := q.Enqueue([]byte(item))
+                            if err != nil {
+                                b.Error(err)
+                            }
+                            atomic.AddInt64(&producedCount, 1)
+                        }
+                    }
+                }(j)
+            }
+
+            // Start consumers
+            for j := 0; j < numConsumers; j++ {
+                wg.Add(1)
+                go func(id int) {
+                    defer wg.Done()
+                    for {
+                        select {
+                        case <-ctx.Done():
+                            return
+                        default:
+                            msg, err := q.DequeueCtx(ctx)
+                            if err != nil {
+                                if err == context.Canceled || err == context.DeadlineExceeded {
+                                    return
+                                }
+                                b.Error(err)
+                                return
+                            }
+                            err = q.Ack(msg.ID)
+                            if err != nil {
+                                b.Error(err)
+                            }
+                            atomic.AddInt64(&consumedCount, 1)
+                        }
+                    }
+                }(j)
+            }
+
+            // Wait for completion or timeout
+            wg.Wait()
+
+            // Ensure all items are consumed
+            for atomic.LoadInt64(&consumedCount) < atomic.LoadInt64(&producedCount) {
+                select {
+                case <-ctx.Done():
+                    b.Error("Benchmark timed out")
+                    return
+                default:
+                    time.Sleep(10 * time.Millisecond)
+                }
+            }
+
+            // Ensure queue is empty
+            length, err := q.Len()
+            if err != nil {
+                b.Error(err)
+            }
+            if length != 0 {
+                b.Errorf("Queue not empty at end of benchmark. Length: %d", length)
+            }
+        }
+    })
 }
