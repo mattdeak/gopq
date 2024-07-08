@@ -98,9 +98,9 @@ When an item is dequeued from an acknowledged queue, an ack deadline is set inte
 import "github.com/mattdeak/gopq"
 // Create a new acknowledged queue with custom options
 queue, err := gopq.NewAckQueue("ack_queue.db", gopq.AckOpts{
-AckTimeout: 30 time.Second,
-MaxRetries: 3,
-RetryBackoff: 5 time.Second,
+    AckTimeout: 30 * time.Second,
+    MaxRetries: 3,
+    RetryBackoff: 5 * time.Second,
 })
 if err != nil {
 // Handle error
@@ -153,17 +153,32 @@ msg3, err := queue.TryDequeue() // This will return an error (queue is empty)
 
 ```
 
-## Dequeue Methods
-* `Dequeue()`: Blocks until an item is available. Uses a background context internally.
-* `DequeueCtx(ctx context.Context)`: Blocks until an item is available or the context is cancelled.
-* `TryDequeue()`: Immediately attempts to dequeue, non-blocking. Returns an error if the queue is empty. Uses a background context internally.
-* `TryDequeueCtx(ctx context.Context)`: Attempts to dequeue immediately. Context
-can be used to interrupt a sqlite operation.
+## Queue Methods
 
-All these methods return a `Msg` struct containing the dequeued item and its ID, along with an error if the operation fails.
+All queue types (SimpleQueue, AckQueue, UniqueQueue, UniqueAckQueue) provide the following methods for enqueueing and dequeueing:
 
-For `AckableQueue`, the dequeue methods also update the acknowledgement deadline for the dequeued item.
+### Enqueue Methods
+* `Enqueue(item []byte) error`: Adds an item to the queue. Blocks if necessary.
+* `EnqueueCtx(ctx context.Context, item []byte) error`: Adds an item to the queue with context support.
+* `TryEnqueue(item []byte) error`: Attempts to add an item to the queue immediately, non-blocking.
+* `TryEnqueueCtx(ctx context.Context, item []byte) error`: Attempts to add an item to the queue immediately with context support.
 
+### Dequeue Methods
+* `Dequeue() (Msg, error)`: Removes and returns an item from the queue. Blocks if the queue is empty.
+* `DequeueCtx(ctx context.Context) (Msg, error)`: Removes and returns an item with context support.
+* `TryDequeue() (Msg, error)`: Attempts to remove and return an item immediately, non-blocking.
+* `TryDequeueCtx(ctx context.Context) (Msg, error)`: Attempts to remove and return an item immediately with context support.
+
+All methods return a `Msg` struct containing the item and its ID, along with an error if the operation fails. For `AckableQueue`, the dequeue methods also update the acknowledgement deadline for the dequeued item.
+
+### Method Patterns
+- Methods without `Ctx` use a background context internally.
+- `Try` methods are non-blocking and return immediately.
+- Methods with `Ctx` allow for cancellation and timeouts using the provided context.
+
+### Additional Methods for AckableQueue
+* `Ack(id int64) error`: Acknowledges successful processing of an item.
+* `Nack(id int64) error`: Indicates failed processing, potentially requeueing the item.
 
 ## Queue Types
 
@@ -201,11 +216,7 @@ deadLetterQueue := SimpleQueue(...)
 mainQueue.RegisterDeadLetterQueue(deadLetterQueue)
 ```
 
-Your dead letter queues can be any queue type or anything that supports the Enqueuer interface. If you want, you can have multiple queues with different settings.
-
-Since all queues can be used as dead letter queues, you could, if you wanted too, put dead letter queues on your dead letter queues.
-
-This is a shorthand for registering a failure callback that enqueues the failed message to the dead letter queue.
+Dead letter queues can be any queue type or anything supporting the Enqueuer interface. You can use multiple queues with different settings, and even chain dead letter queues if needed. This method is a convenient shorthand for registering a failure callback that enqueues failed messages to the specified dead letter queue.
 
 ### Custom Failure Callbacks
 
@@ -217,7 +228,7 @@ For more complex scenarios, you can register custom failure callbacks:
 mainQueue.RegisterOnFailureCallback(func(msg Msg) error {
 // Custom logic for handling failed messages
 log.Printf("Message failed: %v", msg)
-return nil
+    return nil
 })
 
 ```
@@ -230,9 +241,9 @@ AckQueue and UniqueAckQueue support configurable retry mechanisms:
 
 ```go
 queue, := gopq.NewAckQueue("queue.db", gopq.AckOpts{
-AckTimeout: 1 time.Minute, // Any message that takes longer than 1 minute to ack will be requeued.
-MaxRetries: 5 // 0 for no retries, -1 for infinite retries
-RetryBackoff: 10 time.Second, // Sets a new ack deadline to be the max of (current deadline, now + retry backoff)
+    AckTimeout: 1 * time.Minute, // Any message that takes longer than 1 minute to ack will be requeued.
+    MaxRetries: 5 // 0 for no retries, -1 for infinite retries
+    RetryBackoff: 10 * time.Second, // Sets a new ack deadline to be the max of (current deadline, now + retry backoff)
 })
 ```
 
