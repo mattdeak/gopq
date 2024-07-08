@@ -27,7 +27,7 @@ func main() {
 	defer dlq.Close()
 
 	// Set dead letter queue
-	mainQueue.SetDeadLetterQueue(dlq)
+	mainQueue.RegisterDeadLetterQueue(dlq)
 
 	// Enqueue an item
 	err = mainQueue.Enqueue([]byte("Problematic item"))

@@ -8,7 +8,7 @@ import (
 
 const (
 	selectItemDetailsQuery  = "SELECT retry_count, ack_deadline FROM %s WHERE id = ?"
-	deleteItemQuery         = "DELETE FROM %s WHERE id = ? id, item"
+	deleteItemQuery         = "DELETE FROM %s WHERE id = ? RETURNING item"
 	updateItemForRetryQuery = `
 		UPDATE %s 
 		SET ack_deadline = ?, retry_count = retry_count + 1
@@ -42,10 +42,9 @@ func nackImpl(db *sql.DB, tableName string, id int64, opts AckOpts) error {
 		return fmt.Errorf("ack deadline has expired, cannot nack")
 	}
 
-	if retryCount > opts.MaxRetries && opts.MaxRetries != InfiniteRetries {
-		var id int64
+	if retryCount >= opts.MaxRetries && opts.MaxRetries != InfiniteRetries {
 		var item []byte
-		err = tx.QueryRow(fmt.Sprintf(deleteItemQuery, tableName), id).Scan(&id, &item)
+		err = tx.QueryRow(fmt.Sprintf(deleteItemQuery, tableName), id).Scan(&item)
 		if err != nil {
 			return fmt.Errorf("failed to delete item for on failure: %w", err)
 		}

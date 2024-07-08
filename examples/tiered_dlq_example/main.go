@@ -35,8 +35,8 @@ func main() {
 	defer finalDLQ.Close()
 
 	// Set up the chain
-	mainQueue.SetDeadLetterQueue(dlq1)
-	dlq1.SetDeadLetterQueue(finalDLQ)
+	mainQueue.RegisterDeadLetterQueue(dlq1)
+	dlq1.RegisterDeadLetterQueue(finalDLQ)
 
 	// Enqueue an item
 	err = mainQueue.Enqueue([]byte("Problematic item"))

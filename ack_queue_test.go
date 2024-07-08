@@ -175,8 +175,6 @@ func TestAckQueue_Nack(t *testing.T) {
 				require.NoError(t, err)
 				err = q.Nack(msg.ID)
 				require.NoError(t, err)
-				err = q.ExpireAck(msg.ID)
-				require.NoError(t, err)
 			},
 			expectedResult: func(t *testing.T, q, dlq *gopq.AcknowledgeableQueue) {
 				_, err := q.TryDequeue()
@@ -191,12 +189,10 @@ func TestAckQueue_Nack(t *testing.T) {
 			operations: func(t *testing.T, q, dlq *gopq.AcknowledgeableQueue) {
 				err := q.Enqueue([]byte("test"))
 				require.NoError(t, err)
+				msg, err := q.TryDequeue()
+				require.NoError(t, err)
 				for i := 0; i < 3; i++ {
-					msg, err := q.TryDequeue()
-					require.NoError(t, err)
 					err = q.Nack(msg.ID)
-					require.NoError(t, err)
-					err = q.ExpireAck(msg.ID)
 					require.NoError(t, err)
 				}
 			},
@@ -213,14 +209,15 @@ func TestAckQueue_Nack(t *testing.T) {
 			operations: func(t *testing.T, q, dlq *gopq.AcknowledgeableQueue) {
 				err := q.Enqueue([]byte("test"))
 				require.NoError(t, err)
-				for i := 0; i < 2; i++ {
-					msg, err := q.TryDequeue()
-					require.NoError(t, err)
-					err = q.Nack(msg.ID)
-					require.NoError(t, err)
-					err = q.ExpireAck(msg.ID)
-					require.NoError(t, err)
-				}
+				msg, err := q.TryDequeue()
+				require.NoError(t, err)
+				// First nack is fine
+				err = q.Nack(msg.ID)
+				require.NoError(t, err)
+				// Second nack is fine, but results
+				// an item failure
+				err = q.Nack(msg.ID)
+				require.NoError(t, err)
 			},
 			expectedResult: func(t *testing.T, q, dlq *gopq.AcknowledgeableQueue) {
 				assert.Equal(t, 0, queueLength(t, q))

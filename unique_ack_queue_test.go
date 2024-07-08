@@ -220,7 +220,7 @@ func TestUniqueAckQueue_Len_AfterMaxRetries(t *testing.T) {
 
 	// Second attempt (exceeds max retries)
 	require.NoError(t, q.Nack(msg.ID))
-	assertLen(t, q, 1) // Item should be requeued after max retries
+	assertLen(t, q, 0) // Item is gone
 }
 
 func TestUniqueAckQueue_Len_ManyItems(t *testing.T) {
