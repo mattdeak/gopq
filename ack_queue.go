@@ -1,9 +1,9 @@
-package godq
+package gopq
 
 import (
 	"fmt"
 
-	"github.com/mattdeak/godq/internal"
+	"github.com/mattdeak/gopq/internal"
 )
 
 const (
@@ -13,7 +13,7 @@ const (
             item BLOB NOT NULL,
             enqueued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             processed_at TIMESTAMP,
-            ack_deadline TIMESTAMP,
+            ack_deadline INTEGER,
             retry_count INTEGER DEFAULT 0
         );
         CREATE INDEX IF NOT EXISTS idx_processed ON %[1]s(processed_at);
@@ -26,7 +26,7 @@ const (
 		WITH oldest AS (
 			SELECT id, item
 			FROM %[1]s
-			WHERE processed_at IS NULL AND (ack_deadline < CURRENT_TIMESTAMP OR ack_deadline IS NULL)
+			WHERE processed_at IS NULL AND (ack_deadline < ? OR ack_deadline IS NULL)
 			ORDER BY enqueued_at ASC
 			LIMIT 1
 		)
@@ -38,10 +38,10 @@ const (
 	ackAckQuery = `
 		UPDATE %s 
 		SET processed_at = CURRENT_TIMESTAMP 
-		WHERE id = ? AND ack_deadline >= CURRENT_TIMESTAMP
+		WHERE id = ? AND ack_deadline >= ?
 	`
 	ackLenQuery = `
-        SELECT COUNT(*) FROM %s WHERE processed_at IS NULL AND (ack_deadline < CURRENT_TIMESTAMP OR ack_deadline IS NULL)
+        SELECT COUNT(*) FROM %s WHERE processed_at IS NULL AND (ack_deadline IS NULL OR ack_deadline < ?)
     `
 )
 
@@ -53,7 +53,7 @@ func NewAckQueue(filePath string, opts AckOpts) (*AcknowledgeableQueue, error) {
 		return nil, fmt.Errorf("failed to create ack queue: %w", err)
 	}
 
-	tableName := internal.GetUniqueTableName("ack_queue")
+	tableName := internal.DetermineTableName("ack_queue", filePath)
 
 	formattedCreateTableQuery := fmt.Sprintf(ackCreateTableQuery, tableName)
 	formattedEnqueueQuery := fmt.Sprintf(ackEnqueueQuery, tableName)
@@ -79,7 +79,7 @@ func NewAckQueue(filePath string, opts AckOpts) (*AcknowledgeableQueue, error) {
 				len:         formattedLenQuery,
 			},
 		},
-		ackOpts: opts,
+		AckOpts: opts,
 		ackQueries: ackQueries{
 			ack: formattedAckQuery,
 		},

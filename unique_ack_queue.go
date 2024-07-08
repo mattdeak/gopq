@@ -1,9 +1,9 @@
-package godq
+package gopq
 
 import (
 	"fmt"
 
-	"github.com/mattdeak/godq/internal"
+	"github.com/mattdeak/gopq/internal"
 )
 
 const (
@@ -12,12 +12,10 @@ const (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			item BLOB NOT NULL,
 			enqueued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			processed_at TIMESTAMP,
-			ack_deadline TIMESTAMP,
+			ack_deadline INTEGER,
 			retry_count INTEGER DEFAULT 0,
 			UNIQUE(item) ON CONFLICT IGNORE
 		);
-		CREATE INDEX IF NOT EXISTS idx_processed ON %[1]s(processed_at);
 		CREATE INDEX IF NOT EXISTS idx_ack_deadline ON %[1]s(ack_deadline);
 	`
 	uniqueAckEnqueueQuery = `
@@ -27,7 +25,7 @@ const (
 		WITH oldest AS (
 			SELECT id, item
 			FROM %[1]s
-			WHERE ack_deadline IS NULL OR ack_deadline < CURRENT_TIMESTAMP
+			WHERE (ack_deadline < ? OR ack_deadline IS NULL)
 			ORDER BY enqueued_at ASC
 			LIMIT 1
 		)
@@ -36,12 +34,11 @@ const (
 	`
 	uniqueAckAckQuery = `
 		DELETE FROM %s 
-		WHERE id = ? AND ack_deadline >= CURRENT_TIMESTAMP
+		WHERE id = ? AND ack_deadline >= ?
 	`
 	uniqueAckLenQuery = `
 		SELECT COUNT(*) FROM %s
-		WHERE processed_at IS NULL
-		AND (ack_deadline IS NULL OR ack_deadline < CURRENT_TIMESTAMP)
+		WHERE ack_deadline IS NULL OR ack_deadline < ?
 	`
 )
 
@@ -51,7 +48,7 @@ func NewUniqueAckQueue(filePath string, opts AckOpts) (*AcknowledgeableQueue, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to create unique ack queue: %w", err)
 	}
-	tableName := internal.GetUniqueTableName("unique_ack_queue")
+	tableName := internal.DetermineTableName("unique_ack_queue", filePath)
 
 	formattedCreateTableQuery := fmt.Sprintf(uniqueAckCreateTableQuery, tableName)
 	formattedEnqueueQuery := fmt.Sprintf(uniqueAckEnqueueQuery, tableName)
@@ -77,7 +74,7 @@ func NewUniqueAckQueue(filePath string, opts AckOpts) (*AcknowledgeableQueue, er
 				len:         formattedLenQuery,
 			},
 		},
-		ackOpts: opts,
+		AckOpts: opts,
 		ackQueries: ackQueries{
 			ack: formattedAckQuery,
 		},

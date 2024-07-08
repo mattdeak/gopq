@@ -1,4 +1,4 @@
-package godq
+package gopq
 
 import (
 	"context"
@@ -18,6 +18,9 @@ type Enqueuer interface {
 	// Enqueue adds an item to the queue.
 	// It returns an error if the operation fails.
 	Enqueue(item []byte) error
+	EnqueueCtx(ctx context.Context, item []byte) error
+	TryEnqueue(item []byte) error
+	TryEnqueueCtx(ctx context.Context, item []byte) error
 }
 
 // Dequeuer provides methods for dequeueing items from the queue.
@@ -87,7 +90,7 @@ type Queue struct {
 
 type AcknowledgeableQueue struct {
 	Queue
-	ackOpts    AckOpts
+	AckOpts
 	ackQueries ackQueries
 }
 
@@ -111,9 +114,21 @@ func (q *Queue) Close() error {
 // Enqueue adds an item to the queue.
 // It returns an error if the operation fails.
 func (q *Queue) Enqueue(item []byte) error {
-	_, err := q.db.Exec(q.queries.enqueue, item)
+	return q.EnqueueCtx(context.Background(), item)
+}
+
+func (q *Queue) EnqueueCtx(ctx context.Context, item []byte) error {
+	return enqueueBlocking(ctx, q, item, defaultPollInterval)
+}
+
+func (q *Queue) TryEnqueue(item []byte) error {
+	return q.TryEnqueueCtx(context.Background(), item)
+}
+
+func (q *Queue) TryEnqueueCtx(ctx context.Context, item []byte) error {
+	_, err := q.db.ExecContext(ctx, q.queries.enqueue, item)
 	if err != nil {
-		return err
+		return handleEnqueueResult(err)
 	}
 
 	// Send a notification to the channel to wake up the dequeueing goroutine.
@@ -156,16 +171,17 @@ func (q *Queue) Len() (int, error) {
 	return count, err
 }
 
-// SetDeadLetterQueue sets the dead letter queue for this AcknowledgeableQueue.
-// Items that exceed the maximum retry count will be moved to this queue.
-func (q *AcknowledgeableQueue) SetDeadLetterQueue(dlq Enqueuer) {
-	q.ackOpts.DeadLetterQueue = dlq
+func (q *AcknowledgeableQueue) Len() (int, error) {
+	row := q.db.QueryRow(q.queries.len, q.now())
+	var count int
+	err := row.Scan(&count)
+	return count, err
 }
 
 // Ack acknowledges that an item has been successfully processed.
 // It takes the ID of the message to acknowledge and returns an error if the operation fails.
 func (q *AcknowledgeableQueue) Ack(id int64) error {
-	_, err := q.db.Exec(q.ackQueries.ack, id)
+	_, err := q.db.Exec(q.ackQueries.ack, id, q.now())
 	return err
 }
 
@@ -192,8 +208,8 @@ func (q *AcknowledgeableQueue) TryDequeue() (Msg, error) {
 // TryDequeueCtx attempts to remove and return the next item from the queue.
 // It returns immediately if an item is available, or waits until the context is cancelled.
 func (q *AcknowledgeableQueue) TryDequeueCtx(ctx context.Context) (Msg, error) {
-	newAckDeadline := time.Now().Add(q.ackOpts.AckTimeout)
-	row := q.db.QueryRowContext(ctx, q.queries.tryDequeue, newAckDeadline)
+	ackDeadline := time.Now().Add(q.AckOpts.AckTimeout).Unix()
+	row := q.db.QueryRowContext(ctx, q.queries.tryDequeue, q.now(), ackDeadline)
 	var id int64
 	var item []byte
 	err := row.Scan(&id, &item)
@@ -204,7 +220,7 @@ func (q *AcknowledgeableQueue) TryDequeueCtx(ctx context.Context) (Msg, error) {
 // It takes the ID of the message to negative acknowledge.
 // Returns an error if the operation fails or the message doesn't exist.
 func (q *AcknowledgeableQueue) Nack(id int64) error {
-	return nackImpl(q.db, q.name, id, q.ackOpts, q.ackOpts.DeadLetterQueue)
+	return nackImpl(q.db, q.name, id, q.AckOpts)
 }
 
 // ExpireAck expires the acknowledgement deadline for an item,
@@ -213,4 +229,17 @@ func (q *AcknowledgeableQueue) Nack(id int64) error {
 // Returns an error if the operation fails or the message doesn't exist.
 func (q *AcknowledgeableQueue) ExpireAck(id int64) error {
 	return expireAckDeadline(q.db, q.name, id)
+}
+
+// SetBehaviourOnFailure sets the behaviour on failure for the queue.
+// This occurs if a message receives more Nacks than the max retries.
+// It takes a function that takes a message and returns an error.
+// You can manually requeue it, put it in a different queue, or do whatever else.
+// The default behaviour is to drop the message.
+func (q *AcknowledgeableQueue) RegisterBehaviourOnFailure(fn func(msg Msg) error) {
+	q.AckOpts.FailureCallbacks = append(q.AckOpts.FailureCallbacks, fn)
+}
+
+func (q *Queue) now() int64 {
+	return time.Now().Unix()
 }

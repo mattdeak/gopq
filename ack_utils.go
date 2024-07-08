@@ -1,4 +1,4 @@
-package godq
+package gopq
 
 import (
 	"database/sql"
@@ -8,8 +8,7 @@ import (
 
 const (
 	selectItemDetailsQuery  = "SELECT retry_count, ack_deadline FROM %s WHERE id = ?"
-	selectItemForDLQQuery   = "SELECT item FROM %s WHERE id = ?"
-	deleteItemQuery         = "DELETE FROM %s WHERE id = ?"
+	deleteItemQuery         = "DELETE FROM %s WHERE id = ? RETURNING item"
 	updateItemForRetryQuery = `
 		UPDATE %s 
 		SET ack_deadline = ?, retry_count = retry_count + 1
@@ -17,12 +16,12 @@ const (
 	`
 	expireAckDeadlineQuery = `
 		UPDATE %s 
-		SET ack_deadline = datetime('now', '-1 second')
+		SET ack_deadline = ?
 		WHERE id = ?
 	`
 )
 
-func nackImpl(db *sql.DB, tableName string, id int64, opts AckOpts, deadLetterQueue Enqueuer) error {
+func nackImpl(db *sql.DB, tableName string, id int64, opts AckOpts) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -32,45 +31,59 @@ func nackImpl(db *sql.DB, tableName string, id int64, opts AckOpts, deadLetterQu
 	}()
 
 	var retryCount int
-	var currentAckDeadline time.Time
-	err = tx.QueryRow(fmt.Sprintf(selectItemDetailsQuery, tableName), id).Scan(&retryCount, &currentAckDeadline)
+	var ackDeadline int64
+	err = tx.QueryRow(fmt.Sprintf(selectItemDetailsQuery, tableName), id).Scan(&retryCount, &ackDeadline)
 	if err != nil {
 		return fmt.Errorf("failed to get item details: %w", err)
 	}
 
 	// Check if the ack deadline has expired
-	if currentAckDeadline.Before(time.Now()) {
+	if ackDeadline < time.Now().Unix() {
 		return fmt.Errorf("ack deadline has expired, cannot nack")
 	}
 
+	// Check if we have reached the maximum number of retries
 	if retryCount >= opts.MaxRetries && opts.MaxRetries != InfiniteRetries {
-		if deadLetterQueue != nil {
-			var item []byte
-			err = tx.QueryRow(fmt.Sprintf(selectItemForDLQQuery, tableName), id).Scan(&item)
-			if err != nil {
-				return fmt.Errorf("failed to get item for dead letter queue: %w", err)
-			}
-			err = deadLetterQueue.Enqueue(item)
-			if err != nil {
-				return fmt.Errorf("failed to enqueue to dead letter queue: %w", err)
-			}
-		}
-		_, err = tx.Exec(fmt.Sprintf(deleteItemQuery, tableName), id)
-		if err != nil {
-			return fmt.Errorf("failed to delete item: %w", err)
-		}
-	} else {
-		// Use the maximum of retryBackoff and ackTimeout
-		newDeadline := time.Now().Add(max(opts.RetryBackoff, opts.AckTimeout))
-		_, err = tx.Exec(fmt.Sprintf(updateItemForRetryQuery, tableName), newDeadline, id)
-		if err != nil {
-			return fmt.Errorf("failed to update item for retry: %w", err)
-		}
+		return handleTooManyRetries(tx, tableName, id, opts)
+	}
+
+	// Use the maximum of retryBackoff and ackTimeout
+	newDeadline := time.Now().Add(max(opts.RetryBackoff, opts.AckTimeout)).Unix()
+	_, err = tx.Exec(fmt.Sprintf(updateItemForRetryQuery, tableName), newDeadline, id)
+	if err != nil {
+		return fmt.Errorf("failed to update item for retry: %w", err)
 	}
 
 	err = tx.Commit()
 	if err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+func handleTooManyRetries(tx *sql.Tx, tableName string, id int64, opts AckOpts) error {
+	var item []byte
+	err := tx.QueryRow(fmt.Sprintf(deleteItemQuery, tableName), id).Scan(&item)
+	if err != nil {
+		return fmt.Errorf("failed to delete item for on failure: %w", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	if len(opts.FailureCallbacks) > 0 {
+		for _, fn := range opts.FailureCallbacks {
+			err := fn(Msg{
+				ID:   id,
+				Item: item,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to execute failure callback: %w", err)
+			}
+		}
 	}
 
 	return nil
@@ -85,6 +98,8 @@ func max(a, b time.Duration) time.Duration {
 }
 
 func expireAckDeadline(db *sql.DB, name string, id int64) error {
-	_, err := db.Exec(fmt.Sprintf(expireAckDeadlineQuery, name), id)
+	// expiredTime is 1 second in the past to ensure that the ack deadline is expired
+	expiredTime := time.Now().Add(-1 * time.Second).Unix()
+	_, err := db.Exec(fmt.Sprintf(expireAckDeadlineQuery, name), expiredTime, id)
 	return err
 }

@@ -5,13 +5,13 @@ import (
 	"log"
 	"time"
 
-	"github.com/mattdeak/godq"
+	"github.com/mattdeak/gopq"
 )
 
 func main() {
 	// Create main queue
-	mainQueue, err := godq.NewAckQueue("", godq.AckOpts{
-		AckTimeout: 2 * time.Second,
+	mainQueue, err := gopq.NewAckQueue("", gopq.AckOpts{
+		AckTimeout: 2 * time.Hour, // We'll manually expire in this example to make it run faster
 		MaxRetries: 2,
 	})
 	if err != nil {
@@ -20,14 +20,14 @@ func main() {
 	defer mainQueue.Close()
 
 	// Create dead letter queue
-	dlq, err := godq.NewSimpleQueue("")
+	dlq, err := gopq.NewSimpleQueue("")
 	if err != nil {
 		log.Fatalf("Failed to create dead letter queue: %v", err)
 	}
 	defer dlq.Close()
 
 	// Set dead letter queue
-	mainQueue.SetDeadLetterQueue(dlq)
+	mainQueue.RegisterDeadLetterQueue(dlq)
 
 	// Enqueue an item
 	err = mainQueue.Enqueue([]byte("Problematic item"))
@@ -45,7 +45,7 @@ func main() {
 		fmt.Printf("Attempt %d: Dequeued: %s\n", i+1, string(msg.Item))
 
 		// Simulate processing failure
-		time.Sleep(1 * time.Second)
+		time.Sleep(500 * time.Millisecond)
 		err = mainQueue.Nack(msg.ID)
 		if err != nil {
 			log.Printf("Failed to nack item: %v", err)
@@ -54,7 +54,9 @@ func main() {
 		}
 
 		// Wait for item to be available again
-		time.Sleep(2 * time.Second)
+		// time.Sleep(1 * time.Second)
+		// Simulate with ExpireAck
+		mainQueue.ExpireAck(msg.ID)
 	}
 
 	// Check main queue (should be empty)

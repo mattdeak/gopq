@@ -1,10 +1,10 @@
-package godq
+package gopq
 
 import (
 	"context"
 	"database/sql"
-	"log"
-	"reflect"
+	"errors"
+	"strings"
 	"time"
 )
 
@@ -21,13 +21,7 @@ func (e *ErrNoItemsWaiting) Error() string {
 type ErrDBLocked struct{}
 
 func (e *ErrDBLocked) Error() string {
-	return "database locked"
-}
-
-type ErrContextDone struct{}
-
-func (e *ErrContextDone) Error() string {
-	return "context done"
+	return "database table is locked"
 }
 
 // A helper function to handle common dequeue errors.
@@ -36,13 +30,8 @@ func handleDequeueResult(id int64, item []byte, err error) (Msg, error) {
 		return Msg{}, &ErrNoItemsWaiting{}
 	}
 
-	if err == context.Canceled {
-		return Msg{}, &ErrContextDone{}
-	}
-
+	// On error on cancelled context
 	if err != nil {
-		log.Println("Error dequeueing item:", err)
-		log.Println("Error type:", reflect.TypeOf(err))
 		return Msg{}, err
 	}
 
@@ -67,11 +56,51 @@ func dequeueBlocking(ctx context.Context, dequeuer TryDequeuer, pollInterval tim
 
 		select {
 		case <-ctx.Done():
-			return Msg{}, &ErrContextDone{}
+			return Msg{}, context.Canceled
 
 		case <-time.After(pollInterval): // Continue
 		case <-notifyChan: // Continue
 
+		}
+	}
+}
+
+type tryEnqueuer interface {
+	TryEnqueueCtx(ctx context.Context, item []byte) error
+}
+
+func handleEnqueueResult(err error) error {
+	if err == sql.ErrNoRows {
+		return &ErrNoItemsWaiting{}
+	}
+
+	if strings.Contains(err.Error(), "database table is locked") {
+		return &ErrDBLocked{}
+	}
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func enqueueBlocking(ctx context.Context, enqueuer tryEnqueuer, item []byte, pollInterval time.Duration) error {
+	for {
+		err := enqueuer.TryEnqueueCtx(ctx, item)
+		if err == nil {
+			return nil
+		}
+
+		if !errors.Is(err, &ErrDBLocked{}) {
+			return err
+		}
+
+		select {
+		case <-ctx.Done():
+			return context.Canceled
+		case <-time.After(pollInterval):
+			// Continue to next attempt
 		}
 	}
 }

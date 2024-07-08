@@ -5,12 +5,12 @@ import (
 	"log"
 	"time"
 
-	"github.com/mattdeak/godq"
+	"github.com/mattdeak/gopq"
 )
 
 func main() {
 	// Create queues
-	mainQueue, err := godq.NewAckQueue("", godq.AckOpts{
+	mainQueue, err := gopq.NewAckQueue("", gopq.AckOpts{
 		AckTimeout: 2 * time.Second,
 		MaxRetries: 2,
 	})
@@ -19,7 +19,7 @@ func main() {
 	}
 	defer mainQueue.Close()
 
-	dlq1, err := godq.NewAckQueue("", godq.AckOpts{
+	dlq1, err := gopq.NewAckQueue("", gopq.AckOpts{
 		AckTimeout: 5 * time.Second,
 		MaxRetries: 1,
 	})
@@ -28,15 +28,15 @@ func main() {
 	}
 	defer dlq1.Close()
 
-	finalDLQ, err := godq.NewSimpleQueue("")
+	finalDLQ, err := gopq.NewSimpleQueue("")
 	if err != nil {
 		log.Fatalf("Failed to create final DLQ: %v", err)
 	}
 	defer finalDLQ.Close()
 
 	// Set up the chain
-	mainQueue.SetDeadLetterQueue(dlq1)
-	dlq1.SetDeadLetterQueue(finalDLQ)
+	mainQueue.RegisterDeadLetterQueue(dlq1)
+	dlq1.RegisterDeadLetterQueue(finalDLQ)
 
 	// Enqueue an item
 	err = mainQueue.Enqueue([]byte("Problematic item"))
@@ -46,7 +46,7 @@ func main() {
 	fmt.Println("Enqueued: Problematic item")
 
 	// Function to process queue
-	processQueue := func(q godq.AckableQueue, name string, attempts int) {
+	processQueue := func(q gopq.AckableQueue, name string, attempts int) {
 		for i := 0; i < attempts; i++ {
 			msg, err := q.Dequeue()
 			if err != nil {

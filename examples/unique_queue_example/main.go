@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/mattdeak/godq"
+	"github.com/mattdeak/gopq"
 )
 
 func main() {
 	// Create a new unique queue
-	queue, err := godq.NewUniqueQueue("unique_queue.db")
+	queue, err := gopq.NewUniqueQueue("unique_queue.db")
 	if err != nil {
 		log.Fatalf("Failed to create queue: %v", err)
 	}
@@ -44,7 +44,7 @@ func main() {
 	}
 
 	// Demonstrate UniqueAckQueue
-	ackQueue, err := godq.NewUniqueAckQueue("unique_ack_queue.db", godq.AckOpts{
+	ackQueue, err := gopq.NewUniqueAckQueue("unique_ack_queue.db", gopq.AckOpts{
 		MaxRetries: 2,
 	})
 	if err != nil {

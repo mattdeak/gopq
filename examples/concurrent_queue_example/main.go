@@ -8,12 +8,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mattdeak/godq"
+	"github.com/mattdeak/gopq"
 )
 
 func main() {
 	// Create a new queue in memory
-	queue, err := godq.NewUniqueAckQueue("", godq.AckOpts{
+	queue, err := gopq.NewUniqueAckQueue("", gopq.AckOpts{
 		AckTimeout: 15 * time.Second,
 		MaxRetries: 3,
 	})
@@ -60,7 +60,7 @@ func main() {
 	processAttempts := map[string]int{}
 
 	type result struct {
-		msg     godq.Msg
+		msg     gopq.Msg
 		nack    bool
 		success bool
 	}
@@ -85,16 +85,12 @@ func main() {
 		go func(id int) {
 			defer wg.Done()
 			for {
-				// This will block until an item is available. We're assuming the producers
+				// This will block until an item is available. We are assuming the producers
 				// should run forever. If you know your producers will stop, you may want to use
 				// TryDequeue instead to avoid blocking.
 				msg, err := queue.DequeueCtx(ctx)
-				if _, ok := err.(*godq.ErrContextDone); ok {
-					return
-				}
 				if err != nil {
-					log.Printf("Consumer %d failed to dequeue: %v", id, err)
-					continue
+					return
 				}
 				fmt.Printf("Consumer %d dequeued: %s\n", id, string(msg.Item))
 

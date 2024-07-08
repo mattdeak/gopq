@@ -6,12 +6,12 @@ import (
 	"log"
 	"time"
 
-	"github.com/mattdeak/godq"
+	"github.com/mattdeak/gopq"
 )
 
 func main() {
 	// Create a new simple queue
-	queue, err := godq.NewSimpleQueue("")
+	queue, err := gopq.NewSimpleQueue("")
 	if err != nil {
 		log.Fatalf("Failed to create queue: %v", err)
 	}
