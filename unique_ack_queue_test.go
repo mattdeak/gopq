@@ -191,7 +191,8 @@ func TestUniqueAckQueue_Len_ExpiredItem(t *testing.T) {
 	msg, err := q.TryDequeue()
 	require.NoError(t, err)
 
-	q.ExpireAck(msg.ID)
+	err = q.ExpireAck(msg.ID)
+	require.NoError(t, err)
 	assertLen(t, q, 1) // Expired item should be counted
 }
 
