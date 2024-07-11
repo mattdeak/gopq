@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-type TryDequeuer interface {
+type tryDequeuer interface {
 	TryDequeueCtx(ctx context.Context) (Msg, error)
 }
 
@@ -42,7 +42,7 @@ func handleDequeueResult(id int64, item []byte, err error) (Msg, error) {
 }
 
 // dequeueBlocking blocks until an item is available to dequeue, or the context is cancelled.
-func dequeueBlocking(ctx context.Context, dequeuer TryDequeuer, pollInterval time.Duration, notifyChan chan struct{}) (Msg, error) {
+func dequeueBlocking(ctx context.Context, dequeuer tryDequeuer, pollInterval time.Duration, notifyChan chan struct{}) (Msg, error) {
 	for {
 		item, err := dequeuer.TryDequeueCtx(ctx)
 		if err == nil {
@@ -93,6 +93,56 @@ func enqueueBlocking(ctx context.Context, enqueuer tryEnqueuer, item []byte, pol
 		}
 
 		if !errors.Is(err, &ErrDBLocked{}) {
+			return err
+		}
+
+		select {
+		case <-ctx.Done():
+			return context.Canceled
+		case <-time.After(pollInterval):
+			// Continue to next attempt
+		}
+	}
+}
+
+type tryAcker interface {
+	TryAckCtx(ctx context.Context, id int64) error
+	TryNackCtx(ctx context.Context, id int64) error
+}
+
+func ackBlocking(ctx context.Context, acker tryAcker, id int64, pollInterval time.Duration) error {
+	for {
+		err := acker.TryAckCtx(ctx, id)
+
+		if err == nil {
+			return nil
+		}
+
+		// We return on all errors except a locked DB
+		// which we just wait on by trying again.
+		if !strings.Contains(err.Error(), "database table is locked") {
+			return err
+		}
+
+		select {
+		case <-ctx.Done():
+			return context.Canceled
+		case <-time.After(pollInterval):
+			// Continue to next attempt
+		}
+	}
+}
+
+func nackBlocking(ctx context.Context, acker tryAcker, id int64, pollInterval time.Duration) error {
+	for {
+		err := acker.TryNackCtx(ctx, id)
+		if err == nil {
+			return nil
+		}
+
+		// We return on all errors except a locked DB
+		// which we just wait on by trying again.
+		if !strings.Contains(err.Error(), "database table is locked") {
 			return err
 		}
 

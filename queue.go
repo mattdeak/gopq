@@ -117,14 +117,21 @@ func (q *Queue) Enqueue(item []byte) error {
 	return q.EnqueueCtx(context.Background(), item)
 }
 
+// EnqueueCtx adds an item to the queue.
+// It returns an error if the operation fails or the context is cancelled.
 func (q *Queue) EnqueueCtx(ctx context.Context, item []byte) error {
 	return enqueueBlocking(ctx, q, item, defaultPollInterval)
 }
 
+// TryEnqueue attempts to add an item to the queue.
+// It returns immediately, even if the queue is empty.
+// It uses a background context internally.
 func (q *Queue) TryEnqueue(item []byte) error {
 	return q.TryEnqueueCtx(context.Background(), item)
 }
 
+// TryEnqueueCtx attempts to add an item to the queue.
+// This is non-blocking, and will return immediately.
 func (q *Queue) TryEnqueueCtx(ctx context.Context, item []byte) error {
 	_, err := q.db.ExecContext(ctx, q.queries.enqueue, item)
 	if err != nil {
@@ -150,12 +157,17 @@ func (q *Queue) DequeueCtx(ctx context.Context) (Msg, error) {
 	return dequeueBlocking(ctx, q, q.pollInterval, q.notifyChan)
 }
 
+// TryDequeue attempts to remove and return the next item from the queue.
+// It returns immediately, even if the queue is empty.
+// It uses a background context internally.
 func (q *Queue) TryDequeue() (Msg, error) {
 	return q.TryDequeueCtx(context.Background())
 }
 
+// TryDequeueCtx attempts to remove and return the next item from the queue.
+// This is non-blocking, and will return immediately.
 func (q *Queue) TryDequeueCtx(ctx context.Context) (Msg, error) {
-	row := q.db.QueryRow(q.queries.tryDequeue)
+	row := q.db.QueryRowContext(ctx, q.queries.tryDequeue)
 	var id int64
 	var item []byte
 	err := row.Scan(&id, &item)
@@ -171,6 +183,8 @@ func (q *Queue) Len() (int, error) {
 	return count, err
 }
 
+// Len returns the number of items in the queue.
+// It returns the count and any error encountered during the operation.
 func (q *AcknowledgeableQueue) Len() (int, error) {
 	row := q.db.QueryRow(q.queries.len, q.now())
 	var count int
@@ -180,9 +194,60 @@ func (q *AcknowledgeableQueue) Len() (int, error) {
 
 // Ack acknowledges that an item has been successfully processed.
 // It takes the ID of the message to acknowledge and returns an error if the operation fails.
-func (q *AcknowledgeableQueue) Ack(id int64) error {
+func (q *AcknowledgeableQueue) TryAck(id int64) error {
 	_, err := q.db.Exec(q.ackQueries.ack, id, q.now())
 	return err
+}
+
+// TryAckCtx acknowledges that an item has been successfully processed.
+// It takes the ID of the message to acknowledge and returns an error if the operation fails.
+// This is non-blocking, and will return immediately.
+func (q *AcknowledgeableQueue) TryAckCtx(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, q.ackQueries.ack, id, q.now())
+	return err
+}
+
+// Ack acknowledges that an item has been successfully processed.
+// It takes the ID of the message to acknowledge and returns an error if the operation fails.
+// It uses a background context internally.
+func (q *AcknowledgeableQueue) Ack(id int64) error {
+	return q.AckCtx(context.Background(), id)
+}
+
+// AckCtx acknowledges that an item has been successfully processed.
+// It takes the ID of the message to acknowledge and returns an error if the operation fails.
+// If the db is locked, this will block until the db is unlocked.
+func (q *AcknowledgeableQueue) AckCtx(ctx context.Context, id int64) error {
+	return ackBlocking(ctx, q, id, q.pollInterval)
+}
+
+// TryNack indicates that an item processing has failed and should be requeued.
+// It takes the ID of the message to negative acknowledge.
+// This is non-blocking, and will return immediately.
+func (q *AcknowledgeableQueue) TryNack(id int64) error {
+	return nackImpl(context.Background(), q.db, q.name, id, q.AckOpts)
+}
+
+// TryNackCtx indicates that an item processing has failed and should be requeued.
+// It takes the ID of the message to negative acknowledge.
+// This is non-blocking, and will return immediately.
+func (q *AcknowledgeableQueue) TryNackCtx(ctx context.Context, id int64) error {
+	return nackImpl(ctx, q.db, q.name, id, q.AckOpts)
+}
+
+// Nack indicates that an item processing has failed and should be requeued.
+// It takes the ID of the message to negative acknowledge.
+// Returns an error if the operation fails or the message doesn't exist.
+// It uses a background context internally.
+func (q *AcknowledgeableQueue) Nack(id int64) error {
+	return q.NackCtx(context.Background(), id)
+}
+
+// NackCtx indicates that an item processing has failed and should be requeued.
+// It takes the ID of the message to negative acknowledge and returns an error if the operation fails.
+// If the db is locked, this will block until the db is unlocked.
+func (q *AcknowledgeableQueue) NackCtx(ctx context.Context, id int64) error {
+	return nackBlocking(ctx, q, id, q.pollInterval)
 }
 
 // Dequeue removes and returns the next item from the queue.
@@ -214,13 +279,6 @@ func (q *AcknowledgeableQueue) TryDequeueCtx(ctx context.Context) (Msg, error) {
 	var item []byte
 	err := row.Scan(&id, &item)
 	return handleDequeueResult(id, item, err)
-}
-
-// Nack indicates that an item processing has failed and should be requeued.
-// It takes the ID of the message to negative acknowledge.
-// Returns an error if the operation fails or the message doesn't exist.
-func (q *AcknowledgeableQueue) Nack(id int64) error {
-	return nackImpl(q.db, q.name, id, q.AckOpts)
 }
 
 // ExpireAck expires the acknowledgement deadline for an item,
