@@ -1,6 +1,7 @@
 package gopq
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"time"
@@ -21,8 +22,8 @@ const (
 	`
 )
 
-func nackImpl(db *sql.DB, tableName string, id int64, opts AckOpts) error {
-	tx, err := db.Begin()
+func nackImpl(ctx context.Context, db *sql.DB, tableName string, id int64, opts AckOpts) error {
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
