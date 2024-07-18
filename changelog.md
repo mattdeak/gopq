@@ -1,6 +1,6 @@
 # Changelog
-## Unrealeased - 2024-07-11
-### Added
+## [0.2.1]
+### Added - 2024-07-11
 - Added TryAck/TryNack and context-supported Ack/Nack.
 
 ### Fixed
