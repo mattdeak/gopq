@@ -5,18 +5,30 @@ import "time"
 // AckOpts represents the queue-level settings for how acknowledgement
 // of messages is handled.
 const (
-	InfiniteRetries = -1
+	InfiniteRetries           = -1
+	AckMark         AckAction = iota
+	AckDelete
 )
 
-type AckOpts struct {
-	AckTimeout   time.Duration
-	MaxRetries   int
-	RetryBackoff time.Duration
+type (
+	AckAction int
 
-	// Has a default behaviour of dropping the message
-	BehaviourOnFailure func(msg Msg) error
-	FailureCallbacks   []func(msg Msg) error
-}
+	AckOpts struct {
+		AckTimeout   time.Duration
+		MaxRetries   int
+		RetryBackoff time.Duration
+
+		// AckAction determines the fate of the related database record when the
+		// message is acknowledged.
+		// - AckMark (default behaivour) marks the record as done
+		// - AckDelete deletes the record.
+		AckAction AckAction
+
+		// Has a default behaviour of dropping the message
+		BehaviourOnFailure func(msg Msg) error
+		FailureCallbacks   []func(msg Msg) error
+	}
+)
 
 // RegisterOnFailureCallback adds a callback to the queue that is called when
 // a message fails to acknowledge.

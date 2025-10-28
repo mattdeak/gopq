@@ -40,10 +40,19 @@ const (
 		SET processed_at = CURRENT_TIMESTAMP 
 		WHERE id = ? AND ack_deadline >= ?
 	`
+	ackAckDelete = `
+		delete from %s 
+		where id = ? and ack_deadline >= ?
+	`
 	ackLenQuery = `
         SELECT COUNT(*) FROM %s WHERE processed_at IS NULL AND (ack_deadline IS NULL OR ack_deadline < ?)
     `
 )
+
+var ackAckActs = map[AckAction]string{
+	AckMark:   ackAckQuery,
+	AckDelete: ackAckDelete,
+}
 
 // NewAckQueue creates a new ack queue.
 // If filePath is empty, the queue will be created in memory.
@@ -58,7 +67,7 @@ func NewAckQueue(filePath string, opts AckOpts) (*AcknowledgeableQueue, error) {
 	formattedCreateTableQuery := fmt.Sprintf(ackCreateTableQuery, tableName)
 	formattedEnqueueQuery := fmt.Sprintf(ackEnqueueQuery, tableName)
 	formattedTryDequeueQuery := fmt.Sprintf(ackTryDequeueQuery, tableName)
-	formattedAckQuery := fmt.Sprintf(ackAckQuery, tableName)
+	formattedAckQuery := fmt.Sprintf(ackAckActs[opts.AckAction], tableName)
 	formattedLenQuery := fmt.Sprintf(ackLenQuery, tableName)
 
 	err = internal.PrepareDB(db, formattedCreateTableQuery, formattedEnqueueQuery, formattedTryDequeueQuery, formattedAckQuery, formattedLenQuery)
